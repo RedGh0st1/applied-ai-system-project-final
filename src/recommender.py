@@ -1,4 +1,5 @@
-from typing import List, Dict, Tuple, Optional
+"""ToneMatch 1.0 — content-based music recommender."""
+from typing import List, Dict, Tuple
 from dataclasses import dataclass
 
 @dataclass
@@ -31,7 +32,9 @@ class UserProfile:
 
 class Recommender:
     """
-    OOP implementation of the recommendation logic.
+    ToneMatch 1.0 — content-based music recommender.
+    Matches songs to a user profile using energy, valence, acousticness,
+    mood, and genre as the primary vibe signals.
     Required by tests/test_recommender.py
     """
     def __init__(self, songs: List[Song]):

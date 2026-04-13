@@ -1,5 +1,5 @@
 """
-Command line runner for the Music Recommender Simulation.
+ToneMatch 1.0 — Music Recommender Simulation runner.
 
 This file helps you quickly run and test your recommender.
 
