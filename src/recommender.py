@@ -57,7 +57,9 @@ def load_songs(csv_path: str) -> List[Dict]:
     print(f"Loading songs from {csv_path}...")
     return []
 
-def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tuple[Dict, float, str]]:
+def recommend_songs(
+    user_prefs: Dict, songs: List[Dict], k: int = 5
+) -> List[Tuple[Dict, float, str]]:
     """
     Functional implementation of the recommendation logic.
     Required by src/main.py
