@@ -46,22 +46,22 @@ class UserProfile:
 
 # ── Scoring constants ─────────────────────────────────────────────────────────
 #
-# Mood outweighs genre because it captures session-level intent
-# ("what I need right now") vs. long-term genre identity.
+# Genre is the strongest categorical signal, while mood is a
+# useful secondary signal for session-level intent.
 #
 # Point budget breakdown:
-#   Categorical  (mood + genre + subgenre + mode) : max ~7.0 pts
-#   Continuous   (energy + valence + inst)        : max  3.0 pts
+#   Categorical  (genre + mood + subgenre + mode) : max ~6.5 pts
+#   Continuous   (energy + valence + inst)        : max  3.5 pts
 #   Total maximum                                 : ~10.0 pts
 
-POINTS_MOOD_EXACT     = 2.5   # mood == user.favorite_mood
-POINTS_MOOD_ADJACENT  = 1.0   # mood is semantically close to favorite
+POINTS_MOOD_EXACT     = 1.0   # mood == user.favorite_mood
+POINTS_MOOD_ADJACENT  = 0.5   # mood is semantically close to favorite
 POINTS_GENRE_EXACT    = 2.0   # genre == user.favorite_genre
 POINTS_SUBGENRE_EXACT = 1.5   # subgenre match (stacks on genre match only)
 POINTS_MODE_MATCH     = 1.0   # song.mode == user.preferred_mode
 POINTS_MODE_MISMATCH  = -1.0  # wrong key feel penalty
 
-MAX_PTS_ENERGY  = 1.5   # full points when energy == target_energy
+MAX_PTS_ENERGY  = 2.0   # full points when energy == target_energy
 MAX_PTS_VALENCE = 1.0   # full points when valence == target_valence
 MAX_PTS_INST    = 0.5   # full points when instrumentalness == target_inst
 
@@ -108,10 +108,10 @@ def _proximity(value: float, target: float, max_pts: float,
     return max(0.0, max_pts * (1.0 - abs(value - target) / tolerance))
 
 
-def _score_dict(song: Dict, user: Dict) -> Tuple[float, str]:
+def _score_dict(song: Dict, user: Dict) -> Tuple[float, List[str]]:
     """
     Score a single song dict against a user prefs dict.
-    Returns (score, explanation) where explanation lists every rule that fired.
+    Returns (score, reasons) where reasons lists every rule that fired.
     """
     score = 0.0
     hits: List[str] = []
@@ -184,11 +184,22 @@ def _score_dict(song: Dict, user: Dict) -> Tuple[float, str]:
         f"(target {user.get('target_inst', 0.5):.2f}) +{i_pts:.2f}"
     )
 
-    explanation = " | ".join(hits)
-    return max(0.0, score), explanation
+    return max(0.0, score), hits
 
 
-def _score_song_obj(song: Song, user: UserProfile) -> Tuple[float, str]:
+def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
+    """
+    Score a single song dictionary against user preferences.
+
+    Recipe:
+    - +2.0 points for a genre match
+    - +1.0 point for a mood match
+    - +0.0 to +2.0 points for energy similarity
+    """
+    return _score_dict(song, user_prefs)
+
+
+def _score_song_obj(song: Song, user: UserProfile) -> Tuple[float, List[str]]:
     """Bridge: converts Song + UserProfile dataclasses to dicts for _score_dict."""
     song_dict = {
         "mood":             song.mood,
@@ -247,10 +258,11 @@ def recommend_songs(
     Functional implementation of the recommendation logic.
     Required by src/main.py
     """
-    scored = [
-        (song, *_score_dict(song, user_prefs))
-        for song in songs
-    ]
+    scored = []
+    for song in songs:
+        score, reasons = score_song(user_prefs, song)
+        scored.append((song, score, " | ".join(reasons)))
+
     scored.sort(key=lambda x: x[1], reverse=True)
     return scored[:k]
 
@@ -276,5 +288,5 @@ class Recommender:
         return [song for song, _ in scored[:k]]
 
     def explain_recommendation(self, user: UserProfile, song: Song) -> str:
-        _, explanation = _score_song_obj(song, user)
-        return explanation
+        _, reasons = _score_song_obj(song, user)
+        return " | ".join(reasons)
