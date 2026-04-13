@@ -54,20 +54,25 @@ class UserProfile:
 #   Reward-only mode scoring prevents a single key-feel miss from wiping out
 #   an otherwise strong genre + mood + energy alignment.
 #
+# Sensitivity experiment — Weight Shift:
+#   Energy doubled (2.5 → 5.0) so numerical feel competes with categorical labels.
+#   Genre halved  (2.0 → 1.0) so a string match no longer dominates the budget.
+#   Genre partial halved (1.0 → 0.5) to keep the ratio consistent.
+#
 # Point budget breakdown:
-#   Categorical  (genre + mood + subgenre + mode) : max  6.0 pts
-#   Continuous   (energy + valence + inst)        : max  4.5 pts
-#   Total maximum                                 : ~10.5 pts
+#   Categorical  (genre + mood + subgenre + mode) : max  4.5 pts  (was 6.0)
+#   Continuous   (energy + valence + inst)        : max  7.0 pts  (was 4.5)
+#   Total maximum                                 : ~11.5 pts
 
 POINTS_MOOD_EXACT     = 1.0   # mood == user.favorite_mood
 POINTS_MOOD_ADJACENT  = 0.5   # mood is semantically close to favorite
-POINTS_GENRE_EXACT    = 2.0   # genre == user.favorite_genre
-POINTS_GENRE_PARTIAL  = 1.0   # Fix 2: mapped genre (e.g. "bossa nova" → "jazz")
+POINTS_GENRE_EXACT    = 1.0   # weight shift: was 2.0
+POINTS_GENRE_PARTIAL  = 0.5   # weight shift: was 1.0 (keeps partial/exact ratio at 0.5)
 POINTS_SUBGENRE_EXACT = 1.5   # subgenre match (stacks on genre match only)
 POINTS_MODE_MATCH     = 1.0   # song.mode == user.preferred_mode
 POINTS_MODE_MISMATCH  = 0.0   # Fix 4: was -1.0; reward-only prevents a 2-pt swing from one signal
 
-MAX_PTS_ENERGY  = 2.5   # Fix 1: raised from 2.0
+MAX_PTS_ENERGY  = 5.0   # weight shift: was 2.5
 MAX_PTS_VALENCE = 1.5   # Fix 1: raised from 1.0
 MAX_PTS_INST    = 0.5   # unchanged; multiplicative penalty handles extreme mismatches
 

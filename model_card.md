@@ -70,6 +70,9 @@ Prompts:
 - Cases where the system overfits to one preference  
 - Ways the scoring might unintentionally favor some users  
 
+**Catalog Density Creates a Lo-Fi Filter Bubble.**
+The 25-song catalog contains three lo-fi tracks but only one song each for 20 other genres, including rock, jazz, classical, and metal. Because the genre match bonus applies to every song in a genre, a lo-fi listener is guaranteed to see three genre-matched songs in their top results simply because of catalog count — not because the system found a better fit. A rock listener, by contrast, has only one song that can ever earn a genre match, so if that single song scores poorly on energy or valence, their top five fills with genre-miss songs that the system settled for. This means recommendation quality is directly tied to how many songs represent a genre in the catalog, which is an accident of data collection rather than a reflection of musical compatibility. In practice, this would push the system to continuously recommend lo-fi to lo-fi listeners while leaving listeners of underrepresented genres with noticeably weaker, more generic results — a classic filter bubble that reinforces what is already well-represented rather than serving the full range of users equally.
+
 ---
 
 ## 7. Evaluation  
