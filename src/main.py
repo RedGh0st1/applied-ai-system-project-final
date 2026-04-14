@@ -161,6 +161,78 @@ PROFILES = {
         "preferred_mode":    0,           # minor
         "likes_acoustic":    True,
     },
+
+    # Uses: era_feel, detailed_mood_tags, popularity, liveness
+    "The Retro Soul Digger": {
+        "favorite_genre":       "soul",
+        "favorite_subgenre":    "southern soul",
+        "favorite_mood":        "melancholic",
+        "target_energy":        0.38,
+        "target_valence":       0.35,
+        "target_bpm":           70.0,
+        "target_acoustic":      0.65,
+        "target_inst":          0.10,
+        "preferred_mode":       0,
+        "likes_acoustic":       True,
+        # new fields
+        "preferred_era":        "retro",
+        "preferred_language":   "English",
+        "preferred_region":     "Western",
+        "preferred_vocal_gender": "female",
+        "allow_explicit":       True,
+        "target_popularity":    0.45,   # prefers under-the-radar tracks
+        "target_liveness":      0.45,   # likes that live, raw feeling
+        "target_speechiness":   0.10,
+        "preferred_mood_tags":  ["heartbroken", "raw", "soulful", "lonesome", "weary"],
+    },
+
+    # Uses: language, cultural_region, detailed_mood_tags, speechiness
+    "The Global Dance Floor": {
+        "favorite_genre":       "latin",
+        "favorite_subgenre":    "salsa",
+        "favorite_mood":        "passionate",
+        "target_energy":        0.88,
+        "target_valence":       0.88,
+        "target_bpm":           170.0,
+        "target_acoustic":      0.20,
+        "target_inst":          0.10,
+        "preferred_mode":       1,
+        "likes_acoustic":       False,
+        # new fields
+        "preferred_era":        "retro",
+        "preferred_language":   "Spanish",
+        "preferred_region":     "Latin American",
+        "preferred_vocal_gender": "mixed",
+        "allow_explicit":       False,
+        "target_popularity":    0.75,
+        "target_liveness":      0.45,
+        "target_speechiness":   0.09,
+        "preferred_mood_tags":  ["fiery", "celebratory", "sensual", "danceable"],
+    },
+
+    # Uses: explicit filter, speechiness, vocal_gender, mood_tags
+    "The Clean Rap Fan": {
+        "favorite_genre":       "hip-hop",
+        "favorite_subgenre":    "boom bap",
+        "favorite_mood":        "confident",
+        "target_energy":        0.72,
+        "target_valence":       0.68,
+        "target_bpm":           95.0,
+        "target_acoustic":      0.15,
+        "target_inst":          0.05,
+        "preferred_mode":       0,
+        "likes_acoustic":       False,
+        # new fields
+        "preferred_era":        "retro",
+        "preferred_language":   "English",
+        "preferred_region":     "Western",
+        "preferred_vocal_gender": "male",
+        "allow_explicit":       False,   # hard filter — no explicit tracks
+        "target_popularity":    0.65,
+        "target_liveness":      0.12,
+        "target_speechiness":   0.38,   # wants high-speechiness rap delivery
+        "preferred_mood_tags":  ["street", "rhythmic", "braggadocious"],
+    },
 }
 
 

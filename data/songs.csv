@@ -1,26 +1,26 @@
-id,title,artist,genre,subgenre,mood,energy,tempo_bpm,valence,danceability,acousticness,mode,instrumentalness
-1,Sunrise City,Neon Echo,pop,synth pop,happy,0.82,118,0.84,0.79,0.18,1,0.05
-2,Midnight Coding,LoRoom,lofi,lofi hip-hop,chill,0.42,78,0.56,0.62,0.71,1,0.85
-3,Storm Runner,Voltline,rock,hard rock,intense,0.91,152,0.48,0.66,0.10,0,0.10
-4,Library Rain,Paper Lanterns,lofi,lofi hip-hop,chill,0.35,72,0.60,0.58,0.86,1,0.90
-5,Gym Hero,Max Pulse,pop,dance pop,intense,0.93,132,0.77,0.88,0.05,1,0.05
-6,Spacewalk Thoughts,Orbit Bloom,ambient,space ambient,chill,0.28,60,0.65,0.41,0.92,1,0.95
-7,Coffee Shop Stories,Slow Stereo,jazz,smooth jazz,relaxed,0.37,90,0.71,0.54,0.89,1,0.42
-8,Night Drive Loop,Neon Echo,synthwave,darksynth,moody,0.75,110,0.49,0.73,0.22,0,0.72
-9,Focus Flow,LoRoom,lofi,lofi jazz,focused,0.40,80,0.59,0.60,0.78,1,0.88
-10,Rooftop Lights,Indigo Parade,indie pop,dream pop,happy,0.76,124,0.81,0.82,0.35,1,0.10
-11,Golden Hour,Velvet Mason,r&b,neo soul,romantic,0.55,88,0.78,0.72,0.45,1,0.08
-12,Crown Walk,Street Axiom,hip-hop,boom bap,confident,0.72,95,0.68,0.85,0.15,0,0.05
-13,Moonlight Study,Aria Collective,classical,neoclassical,serene,0.18,52,0.52,0.28,0.98,0,0.98
-14,Back Road Summer,Dusty Pines,country,alt-country,nostalgic,0.58,96,0.72,0.62,0.76,1,0.12
-15,Ultraviolet Drop,Phasefield,edm,progressive house,euphoric,0.95,128,0.88,0.92,0.03,1,0.45
-16,Island Morning,Coral Root,reggae,roots reggae,uplifting,0.48,82,0.82,0.70,0.55,1,0.15
-17,Funky Parliament,The Brass Stack,funk,classic funk,groovy,0.78,108,0.85,0.90,0.32,1,0.20
-18,Empty Glass,Mara South,soul,southern soul,melancholic,0.38,68,0.32,0.48,0.62,0,0.10
-19,Iron Curtain,Void Circuit,metal,melodic metal,aggressive,0.96,168,0.30,0.42,0.05,0,0.15
-20,Rainy Delta,Hound & Wire,blues,delta blues,sad,0.30,74,0.28,0.40,0.88,0,0.18
-21,Wildflower Road,June Hollow,folk,indie folk,wistful,0.32,84,0.55,0.45,0.90,1,0.12
-22,3AM Spiral,Dusk Phantom,trap,dark trap,dark,0.68,140,0.22,0.78,0.08,0,0.30
-23,Salsa Fuego,Caliente Crew,latin,salsa,passionate,0.88,185,0.90,0.94,0.22,1,0.10
-24,Fracture Point,Basegrid,drum and bass,liquid dnb,frantic,0.92,174,0.60,0.80,0.05,0,0.55
-25,Neon Seoul,Hyper Idol,k-pop,synth k-pop,energetic,0.85,138,0.86,0.88,0.10,1,0.05
+id,title,artist,genre,subgenre,mood,energy,tempo_bpm,valence,danceability,acousticness,mode,instrumentalness,popularity,release_decade,explicit,language,duration_sec,loudness_db,speechiness,liveness,detailed_mood_tags,cultural_region,vocal_gender,era_feel
+1,Sunrise City,Neon Echo,pop,synth pop,happy,0.82,118,0.84,0.79,0.18,1,0.05,72,2020s,0,English,198,-5.2,0.05,0.12,euphoric|bright|summery,Western,female,contemporary
+2,Midnight Coding,LoRoom,lofi,lofi hip-hop,chill,0.42,78,0.56,0.62,0.71,1,0.85,85,2020s,0,Instrumental,242,-12.8,0.04,0.08,sleepy|calm|studious,Western,none,contemporary
+3,Storm Runner,Voltline,rock,hard rock,intense,0.91,152,0.48,0.66,0.10,0,0.10,58,2010s,0,English,275,-4.1,0.06,0.22,powerful|driving|cinematic,Western,male,contemporary
+4,Library Rain,Paper Lanterns,lofi,lofi hip-hop,chill,0.35,72,0.60,0.58,0.86,1,0.90,78,2020s,0,Instrumental,218,-14.2,0.03,0.06,cozy|introspective|gentle,Western,none,contemporary
+5,Gym Hero,Max Pulse,pop,dance pop,intense,0.93,132,0.77,0.88,0.05,1,0.05,81,2020s,0,English,185,-3.8,0.08,0.10,pumped|triumphant|athletic,Western,male,contemporary
+6,Spacewalk Thoughts,Orbit Bloom,ambient,space ambient,chill,0.28,60,0.65,0.41,0.92,1,0.95,45,2010s,0,Instrumental,312,-18.5,0.03,0.05,dreamy|cosmic|meditative,Western,none,contemporary
+7,Coffee Shop Stories,Slow Stereo,jazz,smooth jazz,relaxed,0.37,90,0.71,0.54,0.89,1,0.42,52,2010s,0,English,264,-13.6,0.12,0.45,warm|breezy|nostalgic,Western,male,retro
+8,Night Drive Loop,Neon Echo,synthwave,darksynth,moody,0.75,110,0.49,0.73,0.22,0,0.72,61,2010s,0,Instrumental,230,-7.4,0.04,0.09,brooding|cinematic|nocturnal,Western,none,contemporary
+9,Focus Flow,LoRoom,lofi,lofi jazz,focused,0.40,80,0.59,0.60,0.78,1,0.88,80,2020s,0,Instrumental,248,-13.1,0.03,0.07,productive|zen|minimal,Western,none,contemporary
+10,Rooftop Lights,Indigo Parade,indie pop,dream pop,happy,0.76,124,0.81,0.82,0.35,1,0.10,67,2020s,0,English,203,-6.9,0.06,0.14,breezy|indie|optimistic,Western,mixed,contemporary
+11,Golden Hour,Velvet Mason,r&b,neo soul,romantic,0.55,88,0.78,0.72,0.45,1,0.08,74,2020s,0,English,221,-9.2,0.09,0.18,sensual|smooth|evening,Western,male,contemporary
+12,Crown Walk,Street Axiom,hip-hop,boom bap,confident,0.72,95,0.68,0.85,0.15,0,0.05,63,2010s,1,English,192,-6.5,0.38,0.11,street|braggadocious|rhythmic,Western,male,retro
+13,Moonlight Study,Aria Collective,classical,neoclassical,serene,0.18,52,0.52,0.28,0.98,0,0.98,48,2020s,0,Instrumental,285,-20.1,0.02,0.32,peaceful|elegant|introspective,Western,none,contemporary
+14,Back Road Summer,Dusty Pines,country,alt-country,nostalgic,0.58,96,0.72,0.62,0.76,1,0.12,55,2010s,0,English,238,-10.3,0.07,0.28,homesick|sun-drenched|folksy,Western,male,retro
+15,Ultraviolet Drop,Phasefield,edm,progressive house,euphoric,0.95,128,0.88,0.92,0.03,1,0.45,88,2020s,0,Instrumental,210,-3.2,0.05,0.08,ecstatic|peak-hour|anthemic,Western,none,contemporary
+16,Island Morning,Coral Root,reggae,roots reggae,uplifting,0.48,82,0.82,0.70,0.55,1,0.15,59,2010s,0,English,245,-11.7,0.08,0.38,sunny|tropical|carefree,Caribbean,male,retro
+17,Funky Parliament,The Brass Stack,funk,classic funk,groovy,0.78,108,0.85,0.90,0.32,1,0.20,66,1970s,0,English,252,-5.8,0.11,0.55,danceable|retro|celebratory,Western,mixed,retro
+18,Empty Glass,Mara South,soul,southern soul,melancholic,0.38,68,0.32,0.48,0.62,0,0.10,43,1990s,0,English,268,-13.9,0.10,0.42,heartbroken|raw|soulful,Western,female,retro
+19,Iron Curtain,Void Circuit,metal,melodic metal,aggressive,0.96,168,0.30,0.42,0.05,0,0.15,71,2010s,1,English,195,-2.9,0.07,0.15,furious|crushing|dark,Western,male,contemporary
+20,Rainy Delta,Hound & Wire,blues,delta blues,sad,0.30,74,0.28,0.40,0.88,0,0.18,38,1960s,0,English,298,-16.4,0.08,0.62,lonesome|rainy|weary,Western,male,retro
+21,Wildflower Road,June Hollow,folk,indie folk,wistful,0.32,84,0.55,0.45,0.90,1,0.12,50,2020s,0,English,226,-15.8,0.09,0.35,tender|longing|acoustic,Western,female,contemporary
+22,3AM Spiral,Dusk Phantom,trap,dark trap,dark,0.68,140,0.22,0.78,0.08,0,0.30,69,2020s,1,English,178,-7.2,0.32,0.10,paranoid|nocturnal|ominous,Western,male,contemporary
+23,Salsa Fuego,Caliente Crew,latin,salsa,passionate,0.88,185,0.90,0.94,0.22,1,0.10,77,2010s,0,Spanish,215,-4.7,0.09,0.48,fiery|celebratory|sensual,Latin American,mixed,retro
+24,Fracture Point,Basegrid,drum and bass,liquid dnb,frantic,0.92,174,0.60,0.80,0.05,0,0.55,62,2020s,0,Instrumental,188,-3.5,0.04,0.07,urgent|complex|kinetic,Western,none,contemporary
+25,Neon Seoul,Hyper Idol,k-pop,synth k-pop,energetic,0.85,138,0.86,0.88,0.10,1,0.05,91,2020s,0,Korean,197,-4.4,0.06,0.09,bright|polished|youthful,East Asian,female,contemporary

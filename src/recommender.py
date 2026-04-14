@@ -26,6 +26,18 @@ class Song:
     acousticness: float
     mode: int           # 0 = minor, 1 = major
     instrumentalness: float
+    popularity: int
+    release_decade: str
+    explicit: int          # 0 or 1
+    language: str
+    duration_sec: int
+    loudness_db: float
+    speechiness: float
+    liveness: float
+    detailed_mood_tags: str   # pipe-separated, e.g. "euphoric|bright|summery"
+    cultural_region: str
+    vocal_gender: str
+    era_feel: str
 
 
 @dataclass
@@ -43,6 +55,15 @@ class UserProfile:
     target_inst: float
     preferred_mode: int  # 0 = minor, 1 = major
     likes_acoustic: bool
+    preferred_era: str        # "retro", "contemporary", or "" (no preference)
+    preferred_language: str   # "English", "Korean", "Spanish", "Instrumental", or "" (any)
+    preferred_region: str     # "Western", "Caribbean", "Latin American", "East Asian", or ""
+    preferred_vocal_gender: str  # "male", "female", "mixed", "none", or ""
+    allow_explicit: bool      # if False, explicit songs are hard-penalised
+    target_popularity: float  # 0.0–1.0  (normalised from 0–100)
+    target_liveness: float    # 0.0–1.0
+    target_speechiness: float # 0.0–1.0
+    preferred_mood_tags: list # list of strings, e.g. ["euphoric", "athletic", "bright"]
 
 
 # ── Scoring constants ─────────────────────────────────────────────────────────
@@ -96,6 +117,21 @@ INST_PENALTY_FACTOR    = 0.60
 #   Prevents true score ties in the dead zone; ensures Python's stable sort
 #   always has a meaningful secondary signal to break on.
 SCORE_SOFT_FLOOR_BASE = 0.0001
+
+# ── New-attribute scoring constants ───────────────────────────────────────────
+POINTS_ERA_MATCH        = 1.0   # song.era_feel == user.preferred_era
+POINTS_LANGUAGE_MATCH   = 0.75  # song.language == user.preferred_language
+POINTS_REGION_MATCH     = 0.75  # song.cultural_region == user.preferred_region
+POINTS_VOCAL_MATCH      = 0.5   # song.vocal_gender == user.preferred_vocal_gender
+POINTS_PER_MOOD_TAG     = 0.4   # per overlapping tag in detailed_mood_tags
+MAX_PTS_MOOD_TAGS       = 1.0   # cap: at most 1.0 pts from mood-tag overlap
+MAX_PTS_POPULARITY      = 0.5   # Gaussian proximity to target_popularity (normalised)
+MAX_PTS_LIVENESS        = 0.75  # Gaussian proximity to target_liveness
+MAX_PTS_SPEECHINESS     = 0.75  # Gaussian proximity to target_speechiness
+EXPLICIT_PENALTY_FACTOR = 0.0   # multiplier when allow_explicit=False and song.explicit=1
+PROXIMITY_SIGMA_POP     = 0.25  # sigma for popularity Gaussian
+PROXIMITY_SIGMA_LIVE    = 0.25  # sigma for liveness Gaussian
+PROXIMITY_SIGMA_SPEECH  = 0.20  # sigma for speechiness Gaussian
 
 # Moods that are close enough to earn partial credit
 _ADJACENT_MOODS: Dict[str, set] = {
@@ -291,6 +327,76 @@ def _score_dict(song: Dict, user: Dict) -> Tuple[float, List[str]]:
             f"→ score ×{INST_PENALTY_FACTOR}"
         )
 
+    # ── New-attribute scoring ─────────────────────────────────────────────────────
+
+    # Explicit filter (hard penalty — multiplies entire score to near-zero)
+    if not user.get("allow_explicit", True) and int(song.get("explicit", 0)) == 1:
+        score *= EXPLICIT_PENALTY_FACTOR
+        hits.append(f"explicit filter: score zeroed (allow_explicit=False)")
+
+    # Era feel match
+    u_era = user.get("preferred_era", "")
+    s_era = song.get("era_feel", "")
+    if u_era and s_era == u_era:
+        score += POINTS_ERA_MATCH
+        hits.append(f"era '{s_era}' match (+{POINTS_ERA_MATCH})")
+
+    # Language match ("Instrumental" always passes — it works in any language)
+    u_lang = user.get("preferred_language", "")
+    s_lang = song.get("language", "")
+    if u_lang and s_lang != "Instrumental":
+        if s_lang == u_lang:
+            score += POINTS_LANGUAGE_MATCH
+            hits.append(f"language '{s_lang}' match (+{POINTS_LANGUAGE_MATCH})")
+
+    # Cultural region match
+    u_region = user.get("preferred_region", "")
+    s_region = song.get("cultural_region", "")
+    if u_region and s_region == u_region:
+        score += POINTS_REGION_MATCH
+        hits.append(f"region '{s_region}' match (+{POINTS_REGION_MATCH})")
+
+    # Vocal gender match ("none" = instrumental, matches any user who prefers instrumentals)
+    u_vg = user.get("preferred_vocal_gender", "")
+    s_vg = song.get("vocal_gender", "")
+    if u_vg and s_vg == u_vg:
+        score += POINTS_VOCAL_MATCH
+        hits.append(f"vocal gender '{s_vg}' match (+{POINTS_VOCAL_MATCH})")
+
+    # Detailed mood-tag overlap
+    u_tags = set(user.get("preferred_mood_tags", []))
+    s_tags = set(song.get("detailed_mood_tags", "").split("|"))
+    if u_tags:
+        matching_tags = u_tags & s_tags
+        tag_pts = min(len(matching_tags) * POINTS_PER_MOOD_TAG, MAX_PTS_MOOD_TAGS)
+        score += tag_pts
+        if matching_tags:
+            hits.append(f"mood tags {sorted(matching_tags)} overlap +{tag_pts:.2f}")
+
+    # Popularity proximity (Gaussian, target_popularity is 0.0–1.0 normalised)
+    u_pop = user.get("target_popularity", None)
+    if u_pop is not None:
+        s_pop = float(song.get("popularity", 50)) / 100.0
+        pop_pts = _proximity(s_pop, u_pop, MAX_PTS_POPULARITY, sigma=PROXIMITY_SIGMA_POP)
+        score += pop_pts
+        hits.append(f"popularity {s_pop:.2f} (target {u_pop:.2f}) +{pop_pts:.2f}")
+
+    # Liveness proximity (Gaussian)
+    u_live = user.get("target_liveness", None)
+    if u_live is not None:
+        s_live = float(song.get("liveness", 0.15))
+        live_pts = _proximity(s_live, u_live, MAX_PTS_LIVENESS, sigma=PROXIMITY_SIGMA_LIVE)
+        score += live_pts
+        hits.append(f"liveness {s_live:.2f} (target {u_live:.2f}) +{live_pts:.2f}")
+
+    # Speechiness proximity (Gaussian)
+    u_speech = user.get("target_speechiness", None)
+    if u_speech is not None:
+        s_speech = float(song.get("speechiness", 0.05))
+        speech_pts = _proximity(s_speech, u_speech, MAX_PTS_SPEECHINESS, sigma=PROXIMITY_SIGMA_SPEECH)
+        score += speech_pts
+        hits.append(f"speechiness {s_speech:.2f} (target {u_speech:.2f}) +{speech_pts:.2f}")
+
     # Fix 5: Soft floor — energy-scaled epsilon prevents true 0.0 ties.
     song_energy = float(song.get("energy", 0.5))
     soft_floor = SCORE_SOFT_FLOOR_BASE * (1.0 + song_energy)
@@ -359,6 +465,18 @@ def load_songs(csv_path: str) -> List[Dict]:
                 "acousticness":     float(row["acousticness"]),
                 "mode":             int(row["mode"]),
                 "instrumentalness": float(row["instrumentalness"]),
+                "popularity":          int(row["popularity"]),
+                "release_decade":      row["release_decade"],
+                "explicit":            int(row["explicit"]),
+                "language":            row["language"],
+                "duration_sec":        int(row["duration_sec"]),
+                "loudness_db":         float(row["loudness_db"]),
+                "speechiness":         float(row["speechiness"]),
+                "liveness":            float(row["liveness"]),
+                "detailed_mood_tags":  row["detailed_mood_tags"],
+                "cultural_region":     row["cultural_region"],
+                "vocal_gender":        row["vocal_gender"],
+                "era_feel":            row["era_feel"],
             })
     print(f"  Loaded {len(songs)} songs.")
     return songs
