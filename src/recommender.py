@@ -203,6 +203,146 @@ GENRE_MAP: Dict[str, str] = {
 }
 
 
+# ── Ranking strategies ───────────────────────────────────────────────────────
+#
+# Each strategy is a dict of per-signal multipliers applied on top of the
+# baseline constants.  A multiplier of 1.0 = unchanged.  0.0 = disabled.
+# _score_dict_strategy() reads these to scale each signal bucket at score time.
+#
+# Signal budget at baseline (mult=1.0):
+#   genre(1.0) + subgenre(1.5) + mood(1.0) + mode(1.0)  → max  4.5 pts categorical
+#   energy(5.0) + valence(1.5) + inst(0.5)               → max  7.0 pts continuous
+#   era(1.0) + lang(0.75) + region(0.75) + vocal(0.5)
+#     + tags(1.0) + pop(0.5) + live(0.75) + speech(0.75) → max  6.0 pts new-attr
+#   Total baseline maximum                               → ~17.5 pts
+
+STRATEGIES: Dict[str, Dict] = {
+
+    # ── 1. Genre-First ────────────────────────────────────────────────────────
+    # Catalog identity is king.  Genre + subgenre multiplied 4×; continuous
+    # signals shrunk to 25% so a string match dominates purely numeric fit.
+    # Best for: users who care deeply about staying inside one genre world.
+    "genre-first": {
+        "description": "Catalog identity first — genre and subgenre dominate, feel is secondary.",
+        "genre_mult":    4.0,   # genre exact:    1.0 × 4  =  4.0 pts
+        "subgenre_mult": 3.0,   # subgenre:       1.5 × 3  =  4.5 pts
+        "mood_mult":     1.0,
+        "mode_mult":     1.0,
+        "energy_mult":   0.25,  # energy max:     5.0 × 0.25 = 1.25 pts
+        "valence_mult":  0.30,  # valence max:    1.5 × 0.30 = 0.45 pts
+        "inst_mult":     0.50,
+        "era_mult":      0.50,
+        "language_mult": 0.50,
+        "region_mult":   0.50,
+        "vocal_mult":    0.50,
+        "tag_per_mult":  0.50,
+        "tag_max_mult":  0.50,
+        "pop_mult":      0.25,
+        "live_mult":     0.25,
+        "speech_mult":   0.25,
+    },
+
+    # ── 2. Mood-First ─────────────────────────────────────────────────────────
+    # Emotional state is king.  Mood exact = 4 pts, mood tags up to 2.5 pts,
+    # valence (emotional positivity/negativity) tripled.  Genre is a soft nudge.
+    # Best for: session-aware recommendations ("I'm feeling sad right now").
+    "mood-first": {
+        "description": "Emotional state first — mood, valence, and mood tags dominate.",
+        "genre_mult":    0.40,
+        "subgenre_mult": 0.40,
+        "mood_mult":     4.00,  # mood exact:  1.0 × 4  = 4.0 pts
+        "mode_mult":     1.00,
+        "energy_mult":   0.50,  # energy max:  5.0 × 0.5 = 2.5 pts
+        "valence_mult":  3.00,  # valence max: 1.5 × 3  = 4.5 pts (emotional tone)
+        "inst_mult":     0.50,
+        "era_mult":      1.00,
+        "language_mult": 1.00,
+        "region_mult":   1.00,
+        "vocal_mult":    1.00,
+        "tag_per_mult":  2.50,  # per-tag:     0.4 × 2.5 = 1.0 pts; max = 2.5 pts
+        "tag_max_mult":  2.50,
+        "pop_mult":      0.50,
+        "live_mult":     0.50,
+        "speech_mult":   0.50,
+    },
+
+    # ── 3. Energy-Focused ─────────────────────────────────────────────────────
+    # Physical intensity only.  Energy multiplied 3× to 15 pts max — it
+    # overwhelms everything else.  Every other signal shrunk to 20–50%.
+    # Best for: workout playlists, DJ sets, or any context where BPM / drive
+    # matters more than genre or emotional nuance.
+    "energy-focused": {
+        "description": "Physical intensity only — energy dominant, everything else secondary.",
+        "genre_mult":    0.20,
+        "subgenre_mult": 0.20,
+        "mood_mult":     0.20,
+        "mode_mult":     0.50,
+        "energy_mult":   3.00,  # energy max:  5.0 × 3 = 15.0 pts — overwhelming
+        "valence_mult":  0.20,
+        "inst_mult":     0.20,
+        "era_mult":      0.25,
+        "language_mult": 0.25,
+        "region_mult":   0.25,
+        "vocal_mult":    0.25,
+        "tag_per_mult":  0.25,
+        "tag_max_mult":  0.25,
+        "pop_mult":      0.25,
+        "live_mult":     0.25,
+        "speech_mult":   0.25,
+    },
+
+    # ── 4. Vibe-Match ─────────────────────────────────────────────────────────
+    # Cultural and contextual identity.  Era, region, language, vocal gender,
+    # and detailed mood tags all multiplied 2.5–3×.  Genre and energy shrunk.
+    # Best for: "I want something that sounds like it's from a specific place
+    # and time" — surfaces cross-genre songs with matching cultural texture.
+    "vibe-match": {
+        "description": "Cultural & contextual identity — era, region, language, vocal gender, tags dominate.",
+        "genre_mult":    0.30,
+        "subgenre_mult": 0.30,
+        "mood_mult":     0.75,
+        "mode_mult":     0.50,
+        "energy_mult":   0.40,
+        "valence_mult":  0.50,
+        "inst_mult":     0.50,
+        "era_mult":      3.00,  # era:         1.0 × 3   = 3.0 pts
+        "language_mult": 2.50,  # language:    0.75 × 2.5 = 1.875 pts
+        "region_mult":   2.50,  # region:      0.75 × 2.5 = 1.875 pts
+        "vocal_mult":    2.50,  # vocal gender: 0.5 × 2.5 = 1.25 pts
+        "tag_per_mult":  3.00,  # per-tag:     0.4 × 3   = 1.2 pts; max = 3.0 pts
+        "tag_max_mult":  3.00,
+        "pop_mult":      1.00,
+        "live_mult":     1.50,
+        "speech_mult":   1.50,
+    },
+
+    # ── 5. Discovery ──────────────────────────────────────────────────────────
+    # Genre completely disabled (0×).  Valence quadrupled — emotional fit is
+    # the only categorical anchor.  Mood tags doubled.  Forces the system to
+    # surface surprising cross-genre songs the user would never search for.
+    # Best for: "Show me something I wouldn't normally pick myself."
+    "discovery": {
+        "description": "Genre-blind discovery — genre disabled; valence + tags surface unexpected fits.",
+        "genre_mult":    0.00,  # genre and subgenre DISABLED
+        "subgenre_mult": 0.00,
+        "mood_mult":     1.50,
+        "mode_mult":     1.00,
+        "energy_mult":   1.20,
+        "valence_mult":  4.00,  # valence max: 1.5 × 4 = 6.0 pts — primary signal
+        "inst_mult":     1.00,
+        "era_mult":      1.00,
+        "language_mult": 1.00,
+        "region_mult":   1.00,
+        "vocal_mult":    1.00,
+        "tag_per_mult":  2.00,  # per-tag: 0.4 × 2 = 0.8 pts; max = 2.0 pts
+        "tag_max_mult":  2.00,
+        "pop_mult":      1.00,
+        "live_mult":     1.00,
+        "speech_mult":   1.00,
+    },
+}
+
+
 # ── Shared scoring helpers ────────────────────────────────────────────────────
 
 def _proximity(value: float, target: float, max_pts: float,
@@ -332,7 +472,7 @@ def _score_dict(song: Dict, user: Dict) -> Tuple[float, List[str]]:
     # Explicit filter (hard penalty — multiplies entire score to near-zero)
     if not user.get("allow_explicit", True) and int(song.get("explicit", 0)) == 1:
         score *= EXPLICIT_PENALTY_FACTOR
-        hits.append(f"explicit filter: score zeroed (allow_explicit=False)")
+        hits.append("explicit filter: score zeroed (allow_explicit=False)")
 
     # Era feel match
     u_era = user.get("preferred_era", "")
@@ -393,13 +533,174 @@ def _score_dict(song: Dict, user: Dict) -> Tuple[float, List[str]]:
     u_speech = user.get("target_speechiness", None)
     if u_speech is not None:
         s_speech = float(song.get("speechiness", 0.05))
-        speech_pts = _proximity(s_speech, u_speech, MAX_PTS_SPEECHINESS, sigma=PROXIMITY_SIGMA_SPEECH)
+        speech_pts = _proximity(
+            s_speech, u_speech, MAX_PTS_SPEECHINESS, sigma=PROXIMITY_SIGMA_SPEECH
+        )
         score += speech_pts
         hits.append(f"speechiness {s_speech:.2f} (target {u_speech:.2f}) +{speech_pts:.2f}")
 
     # Fix 5: Soft floor — energy-scaled epsilon prevents true 0.0 ties.
     song_energy = float(song.get("energy", 0.5))
     soft_floor = SCORE_SOFT_FLOOR_BASE * (1.0 + song_energy)
+    return max(soft_floor, score), hits
+
+
+def _score_dict_strategy(song: Dict, user: Dict, cfg: Dict) -> Tuple[float, List[str]]:
+    """
+    Score a song using per-signal multipliers from a STRATEGIES config dict.
+    Each signal's contribution is scaled by its multiplier before accumulation.
+    A multiplier of 0.0 disables a signal entirely; 1.0 = baseline behaviour.
+    The explicit hard-filter and soft floor always apply regardless of strategy.
+    """
+    score = 0.0
+    hits: List[str] = []
+
+    m_mood    = cfg.get("mood_mult",    1.0)
+    m_genre   = cfg.get("genre_mult",   1.0)
+    m_sub     = cfg.get("subgenre_mult",1.0)
+    m_mode    = cfg.get("mode_mult",    1.0)
+    m_energy  = cfg.get("energy_mult",  1.0)
+    m_valence = cfg.get("valence_mult", 1.0)
+    m_inst    = cfg.get("inst_mult",    1.0)
+    m_era     = cfg.get("era_mult",     1.0)
+    m_lang    = cfg.get("language_mult",1.0)
+    m_region  = cfg.get("region_mult",  1.0)
+    m_vocal   = cfg.get("vocal_mult",   1.0)
+    m_tag_per = cfg.get("tag_per_mult", 1.0)
+    m_tag_max = cfg.get("tag_max_mult", 1.0)
+    m_pop     = cfg.get("pop_mult",     1.0)
+    m_live    = cfg.get("live_mult",    1.0)
+    m_speech  = cfg.get("speech_mult",  1.0)
+
+    # ── Mood ─────────────────────────────────────────────────────────────────
+    s_mood = song.get("mood", "")
+    u_mood = user.get("favorite_mood", "")
+    if s_mood == u_mood:
+        pts = POINTS_MOOD_EXACT * m_mood
+        score += pts
+        hits.append(f"mood exact '{s_mood}' +{pts:.2f}")
+    elif s_mood in _ADJACENT_MOODS.get(u_mood, set()):
+        pts = POINTS_MOOD_ADJACENT * m_mood
+        score += pts
+        hits.append(f"adjacent mood '{s_mood}' +{pts:.2f}")
+
+    # ── Genre + subgenre ─────────────────────────────────────────────────────
+    s_genre = song.get("genre", "")
+    u_genre = user.get("favorite_genre", "")
+    if s_genre == u_genre:
+        pts = POINTS_GENRE_EXACT * m_genre
+        score += pts
+        hits.append(f"genre '{s_genre}' +{pts:.2f}")
+        if song.get("subgenre", "") == user.get("favorite_subgenre", ""):
+            pts2 = POINTS_SUBGENRE_EXACT * m_sub
+            score += pts2
+            hits.append(f"subgenre '{song.get('subgenre')}' +{pts2:.2f}")
+    else:
+        mapped = GENRE_MAP.get(u_genre.lower(), "")
+        if mapped and s_genre == mapped:
+            pts = POINTS_GENRE_PARTIAL * m_genre
+            score += pts
+            hits.append(f"mapped genre '{u_genre}'→'{mapped}' +{pts:.2f}")
+
+    # ── Mode ─────────────────────────────────────────────────────────────────
+    s_mode = int(song.get("mode", -1))
+    u_mode = int(user.get("preferred_mode", -1))
+    key_label = "major" if s_mode == 1 else "minor"
+    if s_mode == u_mode:
+        pts = POINTS_MODE_MATCH * m_mode
+        score += pts
+        hits.append(f"{key_label} key +{pts:.2f}")
+
+    # ── Continuous (Gaussian) ─────────────────────────────────────────────────
+    e_pts = _proximity(float(song.get("energy", 0.5)),
+                       user.get("target_energy", 0.5),
+                       MAX_PTS_ENERGY * m_energy)
+    score += e_pts
+    hits.append(f"energy {float(song.get('energy',0)):.2f} +{e_pts:.2f}")
+
+    v_pts = _proximity(float(song.get("valence", 0.5)),
+                       user.get("target_valence", 0.5),
+                       MAX_PTS_VALENCE * m_valence)
+    score += v_pts
+    hits.append(f"valence {float(song.get('valence',0)):.2f} +{v_pts:.2f}")
+
+    song_inst   = float(song.get("instrumentalness", 0.5))
+    target_inst = user.get("target_inst", 0.5)
+    i_pts = _proximity(song_inst, target_inst,
+                       MAX_PTS_INST * m_inst, sigma=PROXIMITY_SIGMA_INST)
+    score += i_pts
+    hits.append(f"inst {song_inst:.2f} +{i_pts:.2f}")
+
+    if abs(song_inst - target_inst) > INST_PENALTY_THRESHOLD:
+        score *= INST_PENALTY_FACTOR
+        hits.append(f"inst penalty ×{INST_PENALTY_FACTOR}")
+
+    # ── Explicit — always hard filter regardless of strategy ──────────────────
+    if not user.get("allow_explicit", True) and int(song.get("explicit", 0)) == 1:
+        score *= EXPLICIT_PENALTY_FACTOR
+        hits.append("explicit: zeroed")
+
+    # ── New attributes ────────────────────────────────────────────────────────
+    u_era = user.get("preferred_era", "")
+    if u_era and song.get("era_feel", "") == u_era:
+        pts = POINTS_ERA_MATCH * m_era
+        score += pts
+        hits.append(f"era '{u_era}' +{pts:.2f}")
+
+    u_lang = user.get("preferred_language", "")
+    s_lang = song.get("language", "")
+    if u_lang and s_lang != "Instrumental" and s_lang == u_lang:
+        pts = POINTS_LANGUAGE_MATCH * m_lang
+        score += pts
+        hits.append(f"lang '{s_lang}' +{pts:.2f}")
+
+    u_region = user.get("preferred_region", "")
+    if u_region and song.get("cultural_region", "") == u_region:
+        pts = POINTS_REGION_MATCH * m_region
+        score += pts
+        hits.append(f"region '{u_region}' +{pts:.2f}")
+
+    u_vg = user.get("preferred_vocal_gender", "")
+    if u_vg and song.get("vocal_gender", "") == u_vg:
+        pts = POINTS_VOCAL_MATCH * m_vocal
+        score += pts
+        hits.append(f"vocal '{u_vg}' +{pts:.2f}")
+
+    u_tags = set(user.get("preferred_mood_tags", []))
+    s_tags = set(song.get("detailed_mood_tags", "").split("|"))
+    if u_tags:
+        matching = u_tags & s_tags
+        tag_pts  = min(len(matching) * POINTS_PER_MOOD_TAG * m_tag_per,
+                       MAX_PTS_MOOD_TAGS * m_tag_max)
+        score += tag_pts
+        if matching:
+            hits.append(f"tags {sorted(matching)} +{tag_pts:.2f}")
+
+    u_pop = user.get("target_popularity", None)
+    if u_pop is not None:
+        s_pop   = float(song.get("popularity", 50)) / 100.0
+        pop_pts = _proximity(s_pop, u_pop, MAX_PTS_POPULARITY * m_pop,
+                             sigma=PROXIMITY_SIGMA_POP)
+        score += pop_pts
+        hits.append(f"pop {s_pop:.2f} +{pop_pts:.2f}")
+
+    u_live = user.get("target_liveness", None)
+    if u_live is not None:
+        s_live   = float(song.get("liveness", 0.15))
+        live_pts = _proximity(s_live, u_live, MAX_PTS_LIVENESS * m_live,
+                              sigma=PROXIMITY_SIGMA_LIVE)
+        score += live_pts
+        hits.append(f"live {s_live:.2f} +{live_pts:.2f}")
+
+    u_speech = user.get("target_speechiness", None)
+    if u_speech is not None:
+        s_speech   = float(song.get("speechiness", 0.05))
+        speech_pts = _proximity(s_speech, u_speech, MAX_PTS_SPEECHINESS * m_speech,
+                                sigma=PROXIMITY_SIGMA_SPEECH)
+        score += speech_pts
+        hits.append(f"speech {s_speech:.2f} +{speech_pts:.2f}")
+
+    soft_floor = SCORE_SOFT_FLOOR_BASE * (1.0 + float(song.get("energy", 0.5)))
     return max(soft_floor, score), hits
 
 
@@ -499,6 +800,26 @@ def recommend_songs(
         scored.append((song, score, " | ".join(reasons)))
 
     # Primary: score descending. Secondary: catalog id ascending (lower id wins ties).
+    scored.sort(key=lambda x: (x[1], -x[0]["id"]), reverse=True)
+    return scored[:k]
+
+
+def recommend_with_strategy(
+    user_prefs: Dict, songs: List[Dict], strategy_name: str, k: int = 5
+) -> List[Tuple[Dict, float, str]]:
+    """
+    Rank songs using a named strategy from STRATEGIES.
+    Returns top-k as (song_dict, score, reasons_string), same shape as
+    recommend_songs so callers can swap between them transparently.
+
+    Available strategy names: "genre-first", "mood-first", "energy-focused",
+    "vibe-match", "discovery".
+    """
+    cfg = STRATEGIES.get(strategy_name, {})
+    scored = []
+    for song in songs:
+        score, reasons = _score_dict_strategy(song, user_prefs, cfg)
+        scored.append((song, score, " | ".join(reasons)))
     scored.sort(key=lambda x: (x[1], -x[0]["id"]), reverse=True)
     return scored[:k]
 

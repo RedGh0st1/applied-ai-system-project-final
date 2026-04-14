@@ -9,7 +9,12 @@ You will implement the functions in recommender.py:
 - recommend_songs
 """
 
-from .recommender import load_songs, recommend_songs
+from .recommender import (
+    load_songs,
+    recommend_songs,
+    recommend_with_strategy,
+    STRATEGIES,
+)
 
 # ── User profiles ─────────────────────────────────────────────────────────────
 
@@ -236,9 +241,85 @@ PROFILES = {
 }
 
 
+# ── Profiles shown in the strategy comparison ────────────────────────────────
+# Three profiles chosen to highlight strategy differences:
+#   High-Energy Pop  — well-served by all strategies (clear genre + energy)
+#   The Contradiction — conflicting prefs; different strategies resolve it differently
+#   The Retro Soul Digger — rich new-attribute prefs; vibe-match should shine here
+STRATEGY_DEMO_PROFILES = [
+    "High-Energy Pop",
+    "The Contradiction (Fix 1 — Independence)",
+    "The Retro Soul Digger",
+]
+
+STRATEGY_ORDER = [
+    "genre-first",
+    "mood-first",
+    "energy-focused",
+    "vibe-match",
+    "discovery",
+]
+
+
+def _pad(text: str, width: int) -> str:
+    """Truncate and left-pad text to exactly `width` chars."""
+    return text[:width].ljust(width)
+
+
+def print_strategy_comparison(songs: list) -> None:
+    col = 28   # characters per strategy column
+    strat_labels = {
+        "genre-first":    "Genre-First",
+        "mood-first":     "Mood-First",
+        "energy-focused": "Energy-Focused",
+        "vibe-match":     "Vibe-Match",
+        "discovery":      "Discovery",
+    }
+
+    for profile_name in STRATEGY_DEMO_PROFILES:
+        user_prefs = PROFILES[profile_name]
+
+        print(f"\n{'╔' + '═' * (col * len(STRATEGY_ORDER) + len(STRATEGY_ORDER) - 1) + '╗'}")
+        print(f"  STRATEGY COMPARISON — {profile_name}")
+        print(f"{'╚' + '═' * (col * len(STRATEGY_ORDER) + len(STRATEGY_ORDER) - 1) + '╝'}")
+
+        # Header row
+        header = " | ".join(_pad(strat_labels[s], col) for s in STRATEGY_ORDER)
+        desc_row = " | ".join(
+            _pad(STRATEGIES[s]["description"], col) for s in STRATEGY_ORDER
+        )
+        print(f"\n  {header}")
+        print(f"  {desc_row}")
+        print(f"  {'─' * (col * len(STRATEGY_ORDER) + (len(STRATEGY_ORDER) - 1) * 3)}")
+
+        # Top-5 rows per strategy, printed side by side
+        results = {
+            s: recommend_with_strategy(user_prefs, songs, s, k=5)
+            for s in STRATEGY_ORDER
+        }
+
+        for rank in range(5):
+            row_parts = []
+            for s in STRATEGY_ORDER:
+                song, score, _ = results[s][rank]
+                cell = f"{rank+1}. {song['title']} [{score:.1f}]"
+                row_parts.append(_pad(cell, col))
+            print(f"  {' | '.join(row_parts)}")
+
+        # Highlight where strategies disagree on #1
+        top_ones = {s: results[s][0][0]["title"] for s in STRATEGY_ORDER}
+        unique_tops = set(top_ones.values())
+        print(f"\n  #1 winners: {len(unique_tops)} distinct song(s)")
+        for s in STRATEGY_ORDER:
+            desc = STRATEGIES[s]["description"].split("—")[0].strip()
+            print(f"    {strat_labels[s]:16s}  →  {top_ones[s]}")
+        print()
+
+
 def main() -> None:
     songs = load_songs("data/songs.csv")
 
+    # ── Full profile run (default strategy) ──────────────────────────────────
     for profile_name, user_prefs in PROFILES.items():
         print(f"\n{'=' * 62}")
         print(f"  PROFILE: {profile_name}")
@@ -254,6 +335,14 @@ def main() -> None:
             for reason in explanation.split(" | "):
                 print(f"       - {reason}")
         print()
+
+    # ── Strategy comparison ───────────────────────────────────────────────────
+    print(f"\n\n{'#' * 62}")
+    print("  RANKING STRATEGY COMPARISON")
+    print(f"{'#' * 62}")
+    print("  Each column shows the top-5 for the same profile scored")
+    print("  under a different weighting strategy.\n")
+    print_strategy_comparison(songs)
 
 
 if __name__ == "__main__":
