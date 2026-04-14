@@ -13,8 +13,13 @@ from .recommender import (
     load_songs,
     recommend_songs,
     recommend_with_strategy,
+    get_strategy,
     STRATEGIES,
 )
+
+# ── Active strategy — change this one line to switch ranking modes ─────────────
+# Options: "genre-first" | "mood-first" | "energy-focused" | "vibe-match" | "discovery"
+ACTIVE_STRATEGY = "genre-first"
 
 # ── User profiles ─────────────────────────────────────────────────────────────
 
@@ -311,21 +316,23 @@ def print_strategy_comparison(songs: list) -> None:
         unique_tops = set(top_ones.values())
         print(f"\n  #1 winners: {len(unique_tops)} distinct song(s)")
         for s in STRATEGY_ORDER:
-            desc = STRATEGIES[s]["description"].split("—")[0].strip()
             print(f"    {strat_labels[s]:16s}  →  {top_ones[s]}")
         print()
 
 
 def main() -> None:
+    """Run all profiles with the active strategy, then print strategy comparison."""
     songs = load_songs("data/songs.csv")
+    strategy = get_strategy(ACTIVE_STRATEGY)
 
-    # ── Full profile run (default strategy) ──────────────────────────────────
+    # ── Full profile run (active strategy) ───────────────────────────────────
+    print(f"\n  Using ranking strategy: {strategy.name!r} — {strategy.description}")
     for profile_name, user_prefs in PROFILES.items():
         print(f"\n{'=' * 62}")
         print(f"  PROFILE: {profile_name}")
         print(f"{'=' * 62}")
 
-        recommendations = recommend_songs(user_prefs, songs, k=5)
+        recommendations = strategy.rank(user_prefs, songs, k=5)
 
         for idx, rec in enumerate(recommendations, start=1):
             song, score, explanation = rec

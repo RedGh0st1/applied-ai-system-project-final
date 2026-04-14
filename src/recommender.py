@@ -343,6 +343,103 @@ STRATEGIES: Dict[str, Dict] = {
 }
 
 
+# ── Strategy pattern ──────────────────────────────────────────────────────────
+#
+# RankingStrategy wraps one config from STRATEGIES and exposes two methods:
+#
+#   .score(song, user)       → (float, [str])   — score one song
+#   .rank(user, songs, k=5)  → [(song, score, reasons_str)]  — full top-k
+#
+# Callers never touch the raw cfg dict or call _score_dict_strategy directly.
+# To switch modes, pass a different strategy object — the scoring logic is
+# identical; only the multipliers change.
+#
+# Registry:
+#   STRATEGY_REGISTRY  — dict[name → RankingStrategy]
+#   get_strategy(name) — look up by name, raises ValueError if unknown
+
+class RankingStrategy:
+    """
+    One ranking mode encapsulated as an object.
+
+    Attributes
+    ----------
+    name        Short identifier, e.g. "genre-first".
+    description One-line summary shown in comparisons.
+
+    Methods
+    -------
+    score(song, user)         Score one song dict against one user dict.
+    rank(user_prefs, songs)   Return top-k (song, score, reasons) tuples.
+    """
+
+    def __init__(self, name: str, description: str, cfg: Dict) -> None:
+        self.name        = name
+        self.description = description
+        self._cfg        = cfg
+
+    # ── Public interface ──────────────────────────────────────────────────────
+
+    def score(self, song: Dict, user: Dict) -> Tuple[float, List[str]]:
+        """Score a single song. Returns (numeric_score, list_of_reason_strings)."""
+        return _score_dict_strategy(song, user, self._cfg)
+
+    def rank(
+        self,
+        user_prefs: Dict,
+        songs: List[Dict],
+        k: int = 5,
+    ) -> List[Tuple[Dict, float, str]]:
+        """
+        Return the top-k songs for user_prefs under this strategy.
+        Output shape: [(song_dict, score, reasons_string), ...]
+        Same shape as recommend_songs() so callers can swap strategies freely.
+        """
+        scored = [
+            (song, *self.score(song, user_prefs))
+            for song in songs
+        ]
+        # score() returns (float, list[str]); unpack into (song, float, list[str])
+        packed = [
+            (song, sc, " | ".join(reasons))
+            for song, sc, reasons in scored
+        ]
+        packed.sort(key=lambda x: (x[1], -x[0]["id"]), reverse=True)
+        return packed[:k]
+
+    def __repr__(self) -> str:
+        return f"RankingStrategy(name={self.name!r})"
+
+
+# Build one RankingStrategy object per entry in STRATEGIES.
+# Consumed by get_strategy() and by main.py for the comparison table.
+STRATEGY_REGISTRY: Dict[str, "RankingStrategy"] = {
+    name: RankingStrategy(name, cfg["description"], cfg)
+    for name, cfg in STRATEGIES.items()
+}
+
+
+def get_strategy(name: str) -> "RankingStrategy":
+    """
+    Return the RankingStrategy for *name*.
+
+    Usage
+    -----
+        strategy = get_strategy("mood-first")
+        top5     = strategy.rank(user_prefs, songs)
+
+    Raises
+    ------
+    ValueError if *name* is not in STRATEGY_REGISTRY.
+    """
+    if name not in STRATEGY_REGISTRY:
+        available = ", ".join(sorted(STRATEGY_REGISTRY))
+        raise ValueError(
+            f"Unknown strategy {name!r}. Available: {available}"
+        )
+    return STRATEGY_REGISTRY[name]
+
+
 # ── Shared scoring helpers ────────────────────────────────────────────────────
 
 def _proximity(value: float, target: float, max_pts: float,
@@ -808,20 +905,14 @@ def recommend_with_strategy(
     user_prefs: Dict, songs: List[Dict], strategy_name: str, k: int = 5
 ) -> List[Tuple[Dict, float, str]]:
     """
-    Rank songs using a named strategy from STRATEGIES.
+    Rank songs using a named strategy from STRATEGY_REGISTRY.
     Returns top-k as (song_dict, score, reasons_string), same shape as
     recommend_songs so callers can swap between them transparently.
 
     Available strategy names: "genre-first", "mood-first", "energy-focused",
     "vibe-match", "discovery".
     """
-    cfg = STRATEGIES.get(strategy_name, {})
-    scored = []
-    for song in songs:
-        score, reasons = _score_dict_strategy(song, user_prefs, cfg)
-        scored.append((song, score, " | ".join(reasons)))
-    scored.sort(key=lambda x: (x[1], -x[0]["id"]), reverse=True)
-    return scored[:k]
+    return get_strategy(strategy_name).rank(user_prefs, songs, k)
 
 
 # ── OOP API (used by tests/test_recommender.py) ───────────────────────────────
