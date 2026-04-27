@@ -648,3 +648,237 @@ def classify_query_intent(query: str) -> Dict:
         logger.error("classify_query_intent: Claude call failed for query=%r", query)
         return {"genre": "", "mood": "", "energy": "medium", "occasion": ""}
     return _parse_json(text, default={"genre": "", "mood": "", "energy": "medium", "occasion": ""})
+
+
+# ── Agentic Workflow ──────────────────────────────────────────────────────────
+#
+# Two tools give Claude a decision-making loop over the catalog:
+#   search_catalog  — filter songs by genre, mood, or energy range
+#   rank_songs      — score a candidate set against a natural-language description
+#
+# Claude decides which tools to call, in which order, and what arguments to
+# pass.  Every tool call and its result are captured as an observable step so
+# the reasoning chain is visible to the caller.
+
+_AGENT_TOOLS = [
+    {
+        "name": "search_catalog",
+        "description": (
+            "Filter the music catalog by a single attribute. "
+            "Use field='genre' or field='mood' for exact string matches. "
+            "Use field='energy' with value='min,max' (e.g. '0.6,0.85') to find "
+            "songs in a numeric energy range."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "field": {
+                    "type": "string",
+                    "enum": ["genre", "mood", "energy"],
+                    "description": "Which song attribute to filter on.",
+                },
+                "value": {
+                    "type": "string",
+                    "description": (
+                        "For genre/mood: exact label (e.g. 'lofi', 'chill'). "
+                        "For energy: 'min,max' floats (e.g. '0.3,0.55')."
+                    ),
+                },
+            },
+            "required": ["field", "value"],
+        },
+    },
+    {
+        "name": "rank_songs",
+        "description": (
+            "Score and rank a list of songs against a natural-language description. "
+            "Pass the song IDs returned by earlier search_catalog calls. "
+            "Use this as a final step to confirm the best matches among your candidates."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "song_ids": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "Song IDs to rank (from prior search_catalog results).",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Natural-language description of what the listener wants.",
+                },
+                "k": {
+                    "type": "integer",
+                    "description": "Number of top results to return (default 5).",
+                    "default": 5,
+                },
+            },
+            "required": ["song_ids", "description"],
+        },
+    },
+]
+
+
+def _execute_agent_tool(name: str, inputs: dict, songs: List[Dict]) -> dict:
+    """Execute one agent tool call; return a JSON-serialisable result dict."""
+    if name == "search_catalog":
+        field = inputs.get("field", "genre")
+        value = str(inputs.get("value", ""))
+
+        if field == "energy":
+            try:
+                lo_str, hi_str = value.split(",", 1)
+                lo, hi = float(lo_str.strip()), float(hi_str.strip())
+                matches = [
+                    {"id": int(s["id"]), "title": s["title"], "artist": s["artist"],
+                     "genre": s["genre"], "mood": s["mood"], "energy": float(s["energy"])}
+                    for s in songs if lo <= float(s["energy"]) <= hi
+                ]
+            except (ValueError, IndexError):
+                logger.warning("_execute_agent_tool: bad energy value %r", value)
+                matches = []
+        else:
+            matches = [
+                {"id": int(s["id"]), "title": s["title"], "artist": s["artist"],
+                 "genre": s["genre"], "mood": s["mood"], "energy": float(s["energy"])}
+                for s in songs
+                if str(s.get(field, "")).lower() == value.lower()
+            ]
+
+        return {"count": len(matches), "songs": matches}
+
+    if name == "rank_songs":
+        song_ids = {int(i) for i in inputs.get("song_ids", [])}
+        description = str(inputs.get("description", ""))
+        k = int(inputs.get("k", 5))
+
+        subset = [s for s in songs if int(s["id"]) in song_ids] if song_ids else songs
+        if not subset:
+            subset = songs
+        ranked = retrieve_songs_for_query(description, subset, k=k)
+        return {
+            "ranked": [
+                {"id": int(r["id"]), "title": r["title"], "artist": r["artist"],
+                 "genre": r["genre"], "mood": r["mood"], "energy": float(r["energy"])}
+                for r in ranked
+            ]
+        }
+
+    return {"error": f"Unknown tool: {name}"}
+
+
+def agentic_recommend(query: str, songs: List[Dict]) -> Dict:
+    """
+    Agentic recommendation workflow with observable intermediate steps.
+
+    Claude is given two catalog tools (search_catalog, rank_songs) and decides
+    autonomously how to use them to answer the query.  Each tool call and its
+    result are recorded as a step so the full reasoning chain is visible.
+
+    The final answer is grounded in actual tool outputs — Claude cannot name a
+    song that was not returned by a tool call.
+
+    Parameters
+    ----------
+    query : str       Natural-language request from the listener.
+    songs : list      Full song catalog (list of attribute dicts).
+
+    Returns
+    -------
+    {
+        "answer":      str          # final recommendation narrative
+        "steps":       list[dict]   # observable intermediate steps
+        "final_songs": list[dict]   # songs surfaced in the last rank_songs call
+    }
+    """
+    logger.info("agentic_recommend: starting for query=%r", query)
+    client = _get_client()
+
+    system_prompt = (
+        "You are ToneMatch, an AI music curator with tool access to a song catalog. "
+        "To answer the listener's request, explore the catalog step by step using the tools. "
+        "Think about what attributes the listener wants — genre, mood, energy level — "
+        "search the catalog to find candidates, then rank them to confirm the best matches. "
+        "Your final answer must reference only songs that appeared in your tool results. "
+        "Do not invent or name songs that were not returned by the tools."
+    )
+
+    messages: list = [{"role": "user", "content": query}]
+    steps: list = []
+    max_iterations = 8  # guard against infinite loops
+
+    response = client.messages.create(
+        model=MODEL_MAIN,
+        max_tokens=1024,
+        system=system_prompt,
+        tools=_AGENT_TOOLS,
+        messages=messages,
+    )
+    logger.debug("agentic_recommend: initial stop_reason=%r", response.stop_reason)
+
+    for iteration in range(1, max_iterations + 1):
+        if response.stop_reason != "tool_use":
+            break
+
+        tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+        tool_results = []
+
+        for tu in tool_use_blocks:
+            logger.info("agentic_recommend: step %d — tool=%r inputs=%r",
+                        iteration, tu.name, tu.input)
+
+            result = _execute_agent_tool(tu.name, tu.input, songs)
+
+            if "count" in result:
+                summary = f"found {result['count']} songs"
+            else:
+                summary = f"ranked {len(result.get('ranked', []))} songs"
+
+            steps.append({
+                "step":           iteration,
+                "tool":           tu.name,
+                "inputs":         tu.input,
+                "result_summary": summary,
+                "result":         result,
+            })
+            logger.debug("agentic_recommend: step %d result — %s", iteration, summary)
+
+            tool_results.append({
+                "type":        "tool_result",
+                "tool_use_id": tu.id,
+                "content":     json.dumps(result),
+            })
+
+        messages = messages + [
+            {"role": "assistant", "content": response.content},
+            {"role": "user",      "content": tool_results},
+        ]
+        response = client.messages.create(
+            model=MODEL_MAIN,
+            max_tokens=1024,
+            system=system_prompt,
+            tools=_AGENT_TOOLS,
+            messages=messages,
+        )
+        logger.debug("agentic_recommend: after step %d stop_reason=%r",
+                     iteration, response.stop_reason)
+
+    # Extract the final text answer
+    answer = "".join(
+        block.text for block in response.content if hasattr(block, "text")
+    ).strip() or "(No response generated)"
+
+    # Surface the songs from the last rank_songs step (or last search if no ranking)
+    final_songs: list = []
+    for step in reversed(steps):
+        if step["tool"] == "rank_songs":
+            final_songs = step["result"].get("ranked", [])
+            break
+    if not final_songs:
+        for step in reversed(steps):
+            if step["tool"] == "search_catalog":
+                final_songs = step["result"].get("songs", [])[:5]
+                break
+
+    logger.info("agentic_recommend: completed in %d steps", len(steps))
+    return {"answer": answer, "steps": steps, "final_songs": final_songs}

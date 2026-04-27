@@ -42,6 +42,7 @@ from .ai_features import (
     rag_recommend,
     plan_playlist_for_occasion,
     classify_query_intent,
+    agentic_recommend,
 )
 
 # ── Active strategy ───────────────────────────────────────────────────────────
