@@ -511,7 +511,13 @@ def main() -> None:
         logger.info("Agentic query: %r", query)
         print(f"  Query    : {query!r}\n")
 
-        result = agentic_recommend(query, songs)
+        try:
+            result = agentic_recommend(query, songs)
+        except Exception:
+            logger.exception("Agentic workflow failed for query %r", query)
+            print("  [ERROR] Agentic workflow failed — see log for details.\n")
+            print(f"  {'─' * 58}\n")
+            continue
 
         # Print each intermediate step
         for step in result["steps"]:

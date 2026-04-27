@@ -792,7 +792,12 @@ def agentic_recommend(query: str, songs: List[Dict]) -> Dict:
     }
     """
     logger.info("agentic_recommend: starting for query=%r", query)
-    client = _get_client()
+
+    try:
+        client = _get_client()
+    except EnvironmentError as exc:
+        logger.error("agentic_recommend: %s", exc)
+        return {"answer": str(exc), "steps": [], "final_songs": []}
 
     system_prompt = (
         "You are ToneMatch, an AI music curator with tool access to a song catalog. "
@@ -807,13 +812,30 @@ def agentic_recommend(query: str, songs: List[Dict]) -> Dict:
     steps: list = []
     max_iterations = 8  # guard against infinite loops
 
-    response = client.messages.create(
+    def _create(**kwargs):
+        """Thin wrapper so API errors surface as logged warnings, not crashes."""
+        try:
+            return client.messages.create(**kwargs)
+        except anthropic.AuthenticationError:
+            logger.error("[agent] Authentication failed — verify ANTHROPIC_API_KEY")
+        except anthropic.RateLimitError:
+            logger.warning("[agent] Rate limit hit")
+        except anthropic.APIConnectionError as exc:
+            logger.error("[agent] Connection error: %s", exc)
+        except anthropic.APIStatusError as exc:
+            logger.error("[agent] API status %d: %s", exc.status_code, exc.message)
+        return None
+
+    response = _create(
         model=MODEL_MAIN,
         max_tokens=1024,
         system=system_prompt,
         tools=_AGENT_TOOLS,
         messages=messages,
     )
+    if response is None:
+        return {"answer": "Agent unavailable — API call failed.", "steps": [], "final_songs": []}
+
     logger.debug("agentic_recommend: initial stop_reason=%r", response.stop_reason)
 
     for iteration in range(1, max_iterations + 1):
@@ -853,15 +875,24 @@ def agentic_recommend(query: str, songs: List[Dict]) -> Dict:
             {"role": "assistant", "content": response.content},
             {"role": "user",      "content": tool_results},
         ]
-        response = client.messages.create(
+        next_response = _create(
             model=MODEL_MAIN,
             max_tokens=1024,
             system=system_prompt,
             tools=_AGENT_TOOLS,
             messages=messages,
         )
+        if next_response is None:
+            logger.error("agentic_recommend: API call failed at step %d — stopping loop",
+                         iteration)
+            break
+        response = next_response
         logger.debug("agentic_recommend: after step %d stop_reason=%r",
                      iteration, response.stop_reason)
+
+    if response.stop_reason == "tool_use":
+        logger.warning("agentic_recommend: hit max_iterations=%d without final answer",
+                       max_iterations)
 
     # Extract the final text answer
     answer = "".join(
