@@ -8,7 +8,7 @@
 
 The foundation of this work is the [**Music Recommender Simulation**](../ai110-module3show-musicrecommendersimulation-starter), a Codepath AI 110 assignment (`codepath_AI110/ai110-module3show-musicrecommendersimulation-starter`). Its goals were to represent songs and user taste profiles as structured data, design a hand-crafted scoring algorithm that could turn that data into ranked recommendations, and evaluate where the system worked well and where it failed. The original system scored every song in a 25-track catalog against a user profile using a combination of categorical signals (genre, mood, musical key) and Gaussian proximity scores on continuous features like energy, valence, and instrumentalness — returning the top-k results with per-signal explanations.
 
-**ToneMatch AI** keeps that scoring engine intact and layers four AI capabilities on top: natural language query understanding, RAG-based recommendation generation, occasion-aware playlist planning, and dual-stage safety guardrails.
+**ToneMatch AI** keeps that scoring engine intact and layers five AI capabilities on top: natural language query understanding, RAG-based recommendation generation, occasion-aware playlist planning, dual-stage safety guardrails, and an agentic workflow where Claude autonomously decides which catalog tools to call and in what order.
 
 ---
 
@@ -64,7 +64,7 @@ The system has three independent execution paths, visualized in [`assets/system_
 ### Prerequisites
 
 - Python 3.10 or higher
-- An [Anthropic API key](https://console.anthropic.com/) for AI features (Sections 3 and 4; the scoring engine runs without one)
+- An [Anthropic API key](https://console.anthropic.com/) for AI features (Sections 3, 4, and 5; the scoring engine runs without one)
 
 ### 1. Clone and enter the project
 
@@ -102,12 +102,13 @@ The application detects this at startup. If it is missing, Sections 1 and 2 (sco
 python -m src.main
 ```
 
-This runs all four sections in sequence:
+This runs all five sections in sequence:
 
 - **Section 1** — Profile-based recommendations with optional AI narration
 - **Section 2** — Side-by-side comparison of all 5 ranking strategies
 - **Section 3** — RAG pipeline for three natural language queries
 - **Section 4** — Step-by-step playlist plan for a specific occasion
+- **Section 5** — Agentic workflow with observable intermediate tool-call steps
 
 ### 6. Run the test suite
 
