@@ -348,10 +348,20 @@ def main() -> None:
     3  RAG queries             — classify → retrieve → generate → validate
     4  Occasion planning       — step-by-step playlist curation
     """
+    # Configure logging: INFO to console, DEBUG available via LOG_LEVEL=DEBUG
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.INFO),
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
     songs      = load_songs("data/songs.csv")
     strategy   = get_strategy(ACTIVE_STRATEGY)
     ai_enabled = bool(os.environ.get("ANTHROPIC_API_KEY"))
 
+    logger.info("ToneMatch started — strategy=%r, ai_enabled=%s, catalog=%d songs",
+                ACTIVE_STRATEGY, ai_enabled, len(songs))
     print(f"\n  Strategy : {strategy.name!r} — {strategy.description}")
     print(f"  AI mode  : {'enabled' if ai_enabled else 'disabled (set ANTHROPIC_API_KEY)'}")
 
@@ -383,9 +393,15 @@ def main() -> None:
             # The AI actively uses the match signals as evidence — it does not
             # invent reasons or fall back to generic descriptions.
             print("\n  [AI-narrated — scoring engine retrieved, Claude generated]\n")
-            narrative = generate_recommendation_response(user_prefs, recommendations)
-            print(_wrap(narrative, width=62))
-        else:
+            try:
+                narrative = generate_recommendation_response(user_prefs, recommendations)
+                print(_wrap(narrative, width=62))
+            except Exception:
+                logger.exception("AI narration failed for profile %r — falling back to scores",
+                                 profile_name)
+                narrate = False  # fall through to raw output below
+
+        if not narrate:
             # Fallback: raw score output
             for idx, (song, score, explanation) in enumerate(recommendations, start=1):
                 print(f"\n  {idx}. {song['title']} by {song['artist']}")
@@ -424,6 +440,7 @@ def main() -> None:
     print("  Pipeline: classify → retrieve → generate → validate\n")
 
     for query in RAG_QUERIES:
+        logger.info("RAG query: %r", query)
         print(f"  Query    : {query!r}")
 
         # Step 1 — classify free-text into structured intent
@@ -461,8 +478,10 @@ def main() -> None:
     print(f"{'#' * 62}")
     print(f"  Occasion: {PLANNING_OCCASION!r}\n")
 
+    logger.info("Planning playlist for occasion: %r", PLANNING_OCCASION)
     plan = plan_playlist_for_occasion(PLANNING_OCCASION, songs)
     print(_wrap(plan, width=62))
+    logger.info("ToneMatch run complete")
     print()
 
 
