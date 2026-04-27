@@ -1,0 +1,201 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 720" width="900" height="720" font-family="'Segoe UI', Arial, sans-serif">
+
+  <!-- Background -->
+  <rect width="900" height="720" fill="#f8f9fa" rx="12"/>
+
+  <!-- Title -->
+  <text x="450" y="36" text-anchor="middle" font-size="20" font-weight="bold" fill="#1a1a2e">ToneMatch AI — System Diagram</text>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- INPUT LAYER -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <!-- User Query box -->
+  <rect x="60" y="68" width="180" height="56" rx="10" fill="#4361ee" stroke="#3a0ca3" stroke-width="1.5"/>
+  <text x="150" y="92" text-anchor="middle" font-size="13" font-weight="bold" fill="white">User Query</text>
+  <text x="150" y="110" text-anchor="middle" font-size="11" fill="#c8d0ff">"upbeat songs for gym"</text>
+
+  <!-- User Profile box -->
+  <rect x="660" y="68" width="180" height="56" rx="10" fill="#4361ee" stroke="#3a0ca3" stroke-width="1.5"/>
+  <text x="750" y="92" text-anchor="middle" font-size="13" font-weight="bold" fill="white">User Profile</text>
+  <text x="750" y="110" text-anchor="middle" font-size="11" fill="#c8d0ff">genre · mood · energy prefs</text>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- CLASSIFY LAYER -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <!-- Classifier box -->
+  <rect x="60" y="182" width="240" height="60" rx="10" fill="#7209b7" stroke="#560bad" stroke-width="1.5"/>
+  <text x="180" y="206" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Intent Classifier</text>
+  <text x="180" y="224" text-anchor="middle" font-size="11" fill="#e0c3fc">classify_query_intent()</text>
+  <text x="180" y="238" text-anchor="middle" font-size="10" fill="#e0c3fc">Claude Haiku · fast model</text>
+
+  <!-- Occasion/Plan trigger box -->
+  <rect x="600" y="182" width="240" height="60" rx="10" fill="#7209b7" stroke="#560bad" stroke-width="1.5"/>
+  <text x="720" y="206" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Occasion Trigger</text>
+  <text x="720" y="224" text-anchor="middle" font-size="11" fill="#e0c3fc">e.g. "wedding playlist"</text>
+  <text x="720" y="238" text-anchor="middle" font-size="10" fill="#e0c3fc">routes to Planner</text>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- RETRIEVAL / SCORING ENGINE -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <!-- Scoring Engine -->
+  <rect x="220" y="306" width="220" height="70" rx="10" fill="#f77f00" stroke="#d62828" stroke-width="1.5"/>
+  <text x="330" y="330" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Scoring Engine</text>
+  <text x="330" y="348" text-anchor="middle" font-size="11" fill="#fff3e0">recommend_with_strategy()</text>
+  <text x="330" y="364" text-anchor="middle" font-size="10" fill="#fff3e0">5 ranking strategies</text>
+
+  <!-- Song Catalog -->
+  <rect x="60" y="314" width="140" height="54" rx="10" fill="#2d6a4f" stroke="#1b4332" stroke-width="1.5"/>
+  <text x="130" y="336" text-anchor="middle" font-size="12" font-weight="bold" fill="white">Song Catalog</text>
+  <text x="130" y="352" text-anchor="middle" font-size="10" fill="#b7e4c7">data/songs.csv</text>
+  <text x="130" y="364" text-anchor="middle" font-size="10" fill="#b7e4c7">25+ attributes/song</text>
+
+  <!-- Planner -->
+  <rect x="570" y="306" width="220" height="70" rx="10" fill="#e63946" stroke="#9d0208" stroke-width="1.5"/>
+  <text x="680" y="330" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Planner</text>
+  <text x="680" y="348" text-anchor="middle" font-size="11" fill="#ffe8e8">plan_playlist_for_occasion()</text>
+  <text x="680" y="364" text-anchor="middle" font-size="10" fill="#ffe8e8">Claude Sonnet · energy arc</text>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- GENERATION LAYER -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <!-- RAG Generator -->
+  <rect x="220" y="438" width="220" height="70" rx="10" fill="#0077b6" stroke="#023e8a" stroke-width="1.5"/>
+  <text x="330" y="462" text-anchor="middle" font-size="13" font-weight="bold" fill="white">RAG Generator</text>
+  <text x="330" y="480" text-anchor="middle" font-size="11" fill="#caf0f8">rag_recommend()</text>
+  <text x="330" y="496" text-anchor="middle" font-size="10" fill="#caf0f8">Claude Sonnet · grounded answer</text>
+
+  <!-- Summarizer -->
+  <rect x="460" y="438" width="220" height="70" rx="10" fill="#0077b6" stroke="#023e8a" stroke-width="1.5"/>
+  <text x="570" y="462" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Summarizer</text>
+  <text x="570" y="480" text-anchor="middle" font-size="11" fill="#caf0f8">summarize_profile()</text>
+  <text x="570" y="496" text-anchor="middle" font-size="10" fill="#caf0f8">Claude Sonnet · AI narration</text>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- GUARDRAILS -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <!-- Guardrails box -->
+  <rect x="340" y="568" width="220" height="62" rx="10" fill="#e76f51" stroke="#bf4e30" stroke-width="1.5"/>
+  <text x="450" y="591" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Guardrails</text>
+  <text x="450" y="609" text-anchor="middle" font-size="11" fill="#fff0eb">validate_query_safety()</text>
+  <text x="450" y="623" text-anchor="middle" font-size="10" fill="#fff0eb">validate_recommendation_relevance() · Haiku</text>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- OUTPUT -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <!-- Output box -->
+  <rect x="340" y="650" width="220" height="52" rx="10" fill="#1a1a2e" stroke="#16213e" stroke-width="1.5"/>
+  <text x="450" y="673" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Output</text>
+  <text x="450" y="691" text-anchor="middle" font-size="11" fill="#a8dadc">Recommendations · Playlists · Summaries</text>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- TESTING LAYER (human / automated) -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <!-- pytest box -->
+  <rect x="680" y="568" width="180" height="62" rx="10" fill="#606c38" stroke="#283618" stroke-width="1.5"/>
+  <text x="770" y="591" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Test Suite</text>
+  <text x="770" y="609" text-anchor="middle" font-size="11" fill="#dde5b6">pytest (automated)</text>
+  <text x="770" y="623" text-anchor="middle" font-size="10" fill="#dde5b6">test_ai_features.py · test_recommender.py</text>
+
+  <!-- Human Review label -->
+  <rect x="40" y="568" width="180" height="62" rx="10" fill="#606c38" stroke="#283618" stroke-width="1.5"/>
+  <text x="130" y="591" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Human Review</text>
+  <text x="130" y="609" text-anchor="middle" font-size="11" fill="#dde5b6">inspect AI output</text>
+  <text x="130" y="623" text-anchor="middle" font-size="10" fill="#dde5b6">validate guardrail results</text>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ARROWS -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <!-- User Query → Classifier -->
+  <line x1="150" y1="124" x2="150" y2="182" stroke="#4361ee" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+  <!-- User Profile → Occasion Trigger -->
+  <line x1="750" y1="124" x2="750" y2="182" stroke="#4361ee" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+  <!-- Classifier → Scoring Engine -->
+  <line x1="260" y1="242" x2="310" y2="306" stroke="#7209b7" stroke-width="2" marker-end="url(#arrow-purple)"/>
+
+  <!-- Song Catalog → Scoring Engine -->
+  <line x1="200" y1="341" x2="220" y2="341" stroke="#2d6a4f" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+  <!-- Occasion Trigger → Planner -->
+  <line x1="720" y1="242" x2="720" y2="306" stroke="#7209b7" stroke-width="2" marker-end="url(#arrow-purple)"/>
+
+  <!-- Scoring Engine → RAG Generator -->
+  <line x1="330" y1="376" x2="330" y2="438" stroke="#f77f00" stroke-width="2" marker-end="url(#arrow-orange)"/>
+
+  <!-- Scoring Engine → Summarizer (diagonal) -->
+  <line x1="420" y1="376" x2="510" y2="438" stroke="#f77f00" stroke-width="2" marker-end="url(#arrow-orange)"/>
+
+  <!-- Planner → Output (diagonal down) -->
+  <line x1="680" y1="376" x2="550" y2="650" stroke="#e63946" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrow-red)"/>
+
+  <!-- RAG Generator → Guardrails -->
+  <line x1="370" y1="508" x2="410" y2="568" stroke="#0077b6" stroke-width="2" marker-end="url(#arrow-teal)"/>
+
+  <!-- Summarizer → Guardrails -->
+  <line x1="530" y1="508" x2="490" y2="568" stroke="#0077b6" stroke-width="2" marker-end="url(#arrow-teal)"/>
+
+  <!-- Guardrails → Output -->
+  <line x1="450" y1="630" x2="450" y2="650" stroke="#e76f51" stroke-width="2" marker-end="url(#arrow-coral)"/>
+
+  <!-- Test Suite monitors Output (dashed) -->
+  <line x1="680" y1="599" x2="570" y2="680" stroke="#606c38" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow-olive)"/>
+
+  <!-- Human Review monitors Output (dashed) -->
+  <line x1="220" y1="599" x2="365" y2="680" stroke="#606c38" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow-olive)"/>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ARROW MARKERS -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <defs>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4361ee"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#7209b7"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2d6a4f"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#f77f00"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#e63946"/>
+    </marker>
+    <marker id="arrow-teal" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#0077b6"/>
+    </marker>
+    <marker id="arrow-coral" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#e76f51"/>
+    </marker>
+    <marker id="arrow-olive" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#606c38"/>
+    </marker>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- LAYER LABELS (right side) -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <text x="876" y="100" text-anchor="end" font-size="10" fill="#888" font-style="italic">INPUT</text>
+  <text x="876" y="218" text-anchor="end" font-size="10" fill="#888" font-style="italic">CLASSIFY</text>
+  <text x="876" y="346" text-anchor="end" font-size="10" fill="#888" font-style="italic">RETRIEVE</text>
+  <text x="876" y="478" text-anchor="end" font-size="10" fill="#888" font-style="italic">GENERATE</text>
+  <text x="876" y="605" text-anchor="end" font-size="10" fill="#888" font-style="italic">VALIDATE</text>
+  <text x="876" y="678" text-anchor="end" font-size="10" fill="#888" font-style="italic">OUTPUT</text>
+
+  <!-- Legend: dashed = monitoring -->
+  <line x1="40" y1="710" x2="70" y2="710" stroke="#606c38" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="76" y="714" font-size="10" fill="#555">monitoring / verification path</text>
+  <line x1="200" y1="710" x2="230" y2="710" stroke="#555" stroke-width="1.5"/>
+  <text x="236" y="714" font-size="10" fill="#555">data / generation path</text>
+
+</svg>
