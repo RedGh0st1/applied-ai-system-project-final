@@ -1,13 +1,35 @@
 """
-ToneMatch 1.0 — Music Recommender Simulation runner.
+ToneMatch — Music Recommender with integrated AI features.
 
-This file helps you quickly run and test your recommender.
+Application flow
+----------------
+Section 1  Profile recommendations
+           Scoring engine ranks songs (retrieval).
+           For AI-narrated profiles Claude formulates the response using the
+           ranked songs as context (generation) — this IS the RAG loop when
+           the scoring engine acts as the retriever.
+           Non-narrated profiles fall back to the raw score output.
 
-You will implement the functions in recommender.py:
-- load_songs
-- score_song
-- recommend_songs
+Section 2  Strategy comparison
+           Side-by-side numerical view of how the 5 ranking strategies
+           diverge on three representative profiles.
+
+Section 3  RAG — natural language queries   [requires ANTHROPIC_API_KEY]
+           classify_query_intent → retrieve_songs_for_query → rag_recommend
+           → validate_recommendation_relevance.
+           Claude's grounded answer is the primary output; guardrail scores
+           are printed to show automated validation is active.
+
+Section 4  Step-by-step playlist planning   [requires ANTHROPIC_API_KEY]
+           Claude reasons through an occasion's energy arc, maps moods to
+           phases, and selects specific catalog songs for each phase.
 """
+
+import logging
+import os
+import textwrap
+
+logger = logging.getLogger(__name__)
 
 from .recommender import (
     load_songs,
@@ -16,15 +38,13 @@ from .recommender import (
     STRATEGIES,
 )
 from .ai_features import (
+    generate_recommendation_response,
     rag_recommend,
-    summarize_profile,
-    summarize_recommendations,
     plan_playlist_for_occasion,
-    explain_song_score,
     classify_query_intent,
 )
 
-# ── Active strategy — change this one line to switch ranking modes ─────────────
+# ── Active strategy ───────────────────────────────────────────────────────────
 # Options: "genre-first" | "mood-first" | "energy-focused" | "vibe-match" | "discovery"
 ACTIVE_STRATEGY = "genre-first"
 
@@ -36,12 +56,12 @@ PROFILES = {
         "favorite_genre":    "pop",
         "favorite_subgenre": "dance pop",
         "favorite_mood":     "happy",
-        "target_energy":     0.88,   # loud, bright, driven
-        "target_valence":    0.82,   # upbeat and positive
-        "target_bpm":        128.0,  # dance-floor pace
-        "target_acoustic":   0.10,   # fully produced, no acoustic texture
-        "target_inst":       0.05,   # wants vocals front and center
-        "preferred_mode":    1,      # major key — bright and resolved
+        "target_energy":     0.88,
+        "target_valence":    0.82,
+        "target_bpm":        128.0,
+        "target_acoustic":   0.10,
+        "target_inst":       0.05,
+        "preferred_mode":    1,
         "likes_acoustic":    False,
     },
 
@@ -49,12 +69,12 @@ PROFILES = {
         "favorite_genre":    "lofi",
         "favorite_subgenre": "lofi hip-hop",
         "favorite_mood":     "focused",
-        "target_energy":     0.40,   # low intensity, background listening
-        "target_valence":    0.58,   # calm-positive, not sad
-        "target_bpm":        78.0,   # slow, unhurried groove
-        "target_acoustic":   0.80,   # warm, organic texture
-        "target_inst":       0.87,   # near-fully instrumental for focus
-        "preferred_mode":    1,      # major key — relaxed, not tense
+        "target_energy":     0.40,
+        "target_valence":    0.58,
+        "target_bpm":        78.0,
+        "target_acoustic":   0.80,
+        "target_inst":       0.87,
+        "preferred_mode":    1,
         "likes_acoustic":    True,
     },
 
@@ -62,40 +82,32 @@ PROFILES = {
         "favorite_genre":    "rock",
         "favorite_subgenre": "hard rock",
         "favorite_mood":     "aggressive",
-        "target_energy":     0.93,   # maximum physical intensity
-        "target_valence":    0.35,   # dark and driven, not cheerful
-        "target_bpm":        155.0,  # fast, relentless tempo
-        "target_acoustic":   0.08,   # distortion and amplification, no acoustic
-        "target_inst":       0.10,   # raw vocals, shouting encouraged
-        "preferred_mode":    0,      # minor key — tension and aggression
+        "target_energy":     0.93,
+        "target_valence":    0.35,
+        "target_bpm":        155.0,
+        "target_acoustic":   0.08,
+        "target_inst":       0.10,
+        "preferred_mode":    0,
         "likes_acoustic":    False,
     },
 
-    # ── Adversarial profiles — designed to stress-test scoring logic ──────────
+    # ── Adversarial profiles ──────────────────────────────────────────────────
 
-    # Fix 1 (Independence Fix): mood and energy pull in opposite directions.
-    # Before the fix, genre + mood dominated and the continuous signals were
-    # decorative. After: Gaussian energy scoring contributes meaningfully and
-    # the mode reward (not penalty) keeps the ranking honest.
     "The Contradiction (Fix 1 — Independence)": {
         "favorite_genre":    "pop",
         "favorite_subgenre": "dance pop",
-        "favorite_mood":     "sad",        # pulls toward quiet, minor, dark songs
-        "target_energy":     0.92,         # pulls toward high-intensity songs
-        "target_valence":    0.10,         # very dark / negative
+        "favorite_mood":     "sad",
+        "target_energy":     0.92,
+        "target_valence":    0.10,
         "target_bpm":        130.0,
         "target_acoustic":   0.10,
         "target_inst":       0.05,
-        "preferred_mode":    0,            # minor key
+        "preferred_mode":    0,
         "likes_acoustic":    False,
     },
 
-    # Fix 2 (Semantic Fallback): "bossa nova" is not in the catalog.
-    # Before the fix, POINTS_GENRE_EXACT (2.0) was never awarded and the user
-    # silently got random results. After: GENRE_MAP maps "bossa nova" → "jazz",
-    # awarding POINTS_GENRE_PARTIAL (1.0) so Jazz songs surface correctly.
     "The Genre Ghost (Fix 2 — Semantic Fallback)": {
-        "favorite_genre":    "bossa nova",  # not in catalog; maps to "jazz"
+        "favorite_genre":    "bossa nova",
         "favorite_subgenre": "brazilian jazz",
         "favorite_mood":     "relaxed",
         "target_energy":     0.38,
@@ -107,16 +119,11 @@ PROFILES = {
         "likes_acoustic":    True,
     },
 
-    # Fix 3 (Gaussian Scoring): all continuous targets at 0.5 (dead center).
-    # Before the fix, linear proximity with target=0.5 awarded partial points
-    # to almost everything, making categorical signals overwhelmingly dominant.
-    # After: Gaussian RBF creates a true peak at 0.5 — songs that are
-    # "perfectly neutral" score measurably higher than ones that are just close.
     "The Agnostic (Fix 3 — Gaussian Resolution)": {
         "favorite_genre":    "pop",
         "favorite_subgenre": "",
         "favorite_mood":     "happy",
-        "target_energy":     0.50,   # dead center on every continuous axis
+        "target_energy":     0.50,
         "target_valence":    0.50,
         "target_bpm":        100.0,
         "target_acoustic":   0.50,
@@ -125,28 +132,19 @@ PROFILES = {
         "likes_acoustic":    True,
     },
 
-    # Fix 4 (Balance Fix): user loves happy pop but prefers minor key.
-    # Before the fix, POINTS_MODE_MISMATCH = -1.0 caused a 2-pt swing that
-    # could flip a perfect genre + mood match into a loss. After: mismatch
-    # earns 0 instead of -1.0 so strong mood/genre wins still win.
     "The Minor Happy (Fix 4 — Symmetric Mode)": {
         "favorite_genre":    "pop",
         "favorite_subgenre": "indie pop",
         "favorite_mood":     "happy",
         "target_energy":     0.75,
-        "target_valence":    0.80,   # bright and positive ...
+        "target_valence":    0.80,
         "target_bpm":        120.0,
         "target_acoustic":   0.30,
         "target_inst":       0.10,
-        "preferred_mode":    0,      # ... but prefers minor key — the contradiction
+        "preferred_mode":    0,
         "likes_acoustic":    False,
     },
 
-    # Fix 1 (Independence Fix — Lyric Lover variant): target_inst=0.95 signals
-    # a strong desire for fully instrumental music. Before the fix, the 0.5-pt
-    # max for inst was too small to beat a genre match — vocal songs still won.
-    # After: the ×0.6 multiplicative penalty fires when inst diff > 0.7,
-    # scaling down vocal-heavy songs even when genre/mood is a perfect match.
     "The Lyric Lover (Fix 1 — Inst Penalty)": {
         "favorite_genre":    "lofi",
         "favorite_subgenre": "lofi hip-hop",
@@ -155,109 +153,112 @@ PROFILES = {
         "target_valence":    0.55,
         "target_bpm":        78.0,
         "target_acoustic":   0.80,
-        "target_inst":       0.95,   # wants fully instrumental
+        "target_inst":       0.95,
         "preferred_mode":    1,
         "likes_acoustic":    True,
     },
 
-    # Fix 5 (Sorting Fix): niche genre + extreme targets push most songs to
-    # near-zero. Before the fix, max(0.0, score) created a "dead zone" where
-    # multiple songs tied at exactly 0.0 and catalog order decided the winner
-    # silently. After: soft floor = 0.0001 × (1 + energy) ensures no two songs
-    # share an identical score, and (score DESC, id ASC) sorting makes
-    # tie-breaking transparent and deterministic.
     "The Mismatch Maximizer (Fix 5 — Soft Floor + Tie-break)": {
         "favorite_genre":    "classical",
-        "favorite_subgenre": "baroque",   # not in catalog
+        "favorite_subgenre": "baroque",
         "favorite_mood":     "serene",
-        "target_energy":     0.05,        # very low — most songs miss badly
-        "target_valence":    0.10,        # very dark
+        "target_energy":     0.05,
+        "target_valence":    0.10,
         "target_bpm":        50.0,
         "target_acoustic":   0.99,
         "target_inst":       0.99,
-        "preferred_mode":    0,           # minor
+        "preferred_mode":    0,
         "likes_acoustic":    True,
     },
 
-    # Uses: era_feel, detailed_mood_tags, popularity, liveness
     "The Retro Soul Digger": {
-        "favorite_genre":       "soul",
-        "favorite_subgenre":    "southern soul",
-        "favorite_mood":        "melancholic",
-        "target_energy":        0.38,
-        "target_valence":       0.35,
-        "target_bpm":           70.0,
-        "target_acoustic":      0.65,
-        "target_inst":          0.10,
-        "preferred_mode":       0,
-        "likes_acoustic":       True,
-        # new fields
-        "preferred_era":        "retro",
-        "preferred_language":   "English",
-        "preferred_region":     "Western",
+        "favorite_genre":         "soul",
+        "favorite_subgenre":      "southern soul",
+        "favorite_mood":          "melancholic",
+        "target_energy":          0.38,
+        "target_valence":         0.35,
+        "target_bpm":             70.0,
+        "target_acoustic":        0.65,
+        "target_inst":            0.10,
+        "preferred_mode":         0,
+        "likes_acoustic":         True,
+        "preferred_era":          "retro",
+        "preferred_language":     "English",
+        "preferred_region":       "Western",
         "preferred_vocal_gender": "female",
-        "allow_explicit":       True,
-        "target_popularity":    0.45,   # prefers under-the-radar tracks
-        "target_liveness":      0.45,   # likes that live, raw feeling
-        "target_speechiness":   0.10,
-        "preferred_mood_tags":  ["heartbroken", "raw", "soulful", "lonesome", "weary"],
+        "allow_explicit":         True,
+        "target_popularity":      0.45,
+        "target_liveness":        0.45,
+        "target_speechiness":     0.10,
+        "preferred_mood_tags":    ["heartbroken", "raw", "soulful", "lonesome", "weary"],
     },
 
-    # Uses: language, cultural_region, detailed_mood_tags, speechiness
     "The Global Dance Floor": {
-        "favorite_genre":       "latin",
-        "favorite_subgenre":    "salsa",
-        "favorite_mood":        "passionate",
-        "target_energy":        0.88,
-        "target_valence":       0.88,
-        "target_bpm":           170.0,
-        "target_acoustic":      0.20,
-        "target_inst":          0.10,
-        "preferred_mode":       1,
-        "likes_acoustic":       False,
-        # new fields
-        "preferred_era":        "retro",
-        "preferred_language":   "Spanish",
-        "preferred_region":     "Latin American",
+        "favorite_genre":         "latin",
+        "favorite_subgenre":      "salsa",
+        "favorite_mood":          "passionate",
+        "target_energy":          0.88,
+        "target_valence":         0.88,
+        "target_bpm":             170.0,
+        "target_acoustic":        0.20,
+        "target_inst":            0.10,
+        "preferred_mode":         1,
+        "likes_acoustic":         False,
+        "preferred_era":          "retro",
+        "preferred_language":     "Spanish",
+        "preferred_region":       "Latin American",
         "preferred_vocal_gender": "mixed",
-        "allow_explicit":       False,
-        "target_popularity":    0.75,
-        "target_liveness":      0.45,
-        "target_speechiness":   0.09,
-        "preferred_mood_tags":  ["fiery", "celebratory", "sensual", "danceable"],
+        "allow_explicit":         False,
+        "target_popularity":      0.75,
+        "target_liveness":        0.45,
+        "target_speechiness":     0.09,
+        "preferred_mood_tags":    ["fiery", "celebratory", "sensual", "danceable"],
     },
 
-    # Uses: explicit filter, speechiness, vocal_gender, mood_tags
     "The Clean Rap Fan": {
-        "favorite_genre":       "hip-hop",
-        "favorite_subgenre":    "boom bap",
-        "favorite_mood":        "confident",
-        "target_energy":        0.72,
-        "target_valence":       0.68,
-        "target_bpm":           95.0,
-        "target_acoustic":      0.15,
-        "target_inst":          0.05,
-        "preferred_mode":       0,
-        "likes_acoustic":       False,
-        # new fields
-        "preferred_era":        "retro",
-        "preferred_language":   "English",
-        "preferred_region":     "Western",
+        "favorite_genre":         "hip-hop",
+        "favorite_subgenre":      "boom bap",
+        "favorite_mood":          "confident",
+        "target_energy":          0.72,
+        "target_valence":         0.68,
+        "target_bpm":             95.0,
+        "target_acoustic":        0.15,
+        "target_inst":            0.05,
+        "preferred_mode":         0,
+        "likes_acoustic":         False,
+        "preferred_era":          "retro",
+        "preferred_language":     "English",
+        "preferred_region":       "Western",
         "preferred_vocal_gender": "male",
-        "allow_explicit":       False,   # hard filter — no explicit tracks
-        "target_popularity":    0.65,
-        "target_liveness":      0.12,
-        "target_speechiness":   0.38,   # wants high-speechiness rap delivery
-        "preferred_mood_tags":  ["street", "rhythmic", "braggadocious"],
+        "allow_explicit":         False,
+        "target_popularity":      0.65,
+        "target_liveness":        0.12,
+        "target_speechiness":     0.38,
+        "preferred_mood_tags":    ["street", "rhythmic", "braggadocious"],
     },
 }
 
+# ── AI-narrated profiles ──────────────────────────────────────────────────────
+# For these profiles the scoring engine acts as the retriever and Claude acts
+# as the generator — the AI narrative replaces the raw score dump.
+# Other profiles still run but show the raw numerical output.
+AI_NARRATED_PROFILES = {
+    "High-Energy Pop",
+    "Chill Lo-Fi",
+    "The Retro Soul Digger",
+}
 
-# ── Profiles shown in the strategy comparison ────────────────────────────────
-# Three profiles chosen to highlight strategy differences:
-#   High-Energy Pop  — well-served by all strategies (clear genre + energy)
-#   The Contradiction — conflicting prefs; different strategies resolve it differently
-#   The Retro Soul Digger — rich new-attribute prefs; vibe-match should shine here
+# ── RAG queries for Section 3 ─────────────────────────────────────────────────
+RAG_QUERIES = [
+    "I need something dark and moody for a late-night drive",
+    "upbeat songs to hype me up for a morning workout",
+    "chill background music for studying late at night",
+]
+
+# ── Occasion for Section 4 ────────────────────────────────────────────────────
+PLANNING_OCCASION = "a dinner party that starts relaxed and gradually builds to dancing"
+
+# ── Strategy comparison config ────────────────────────────────────────────────
 STRATEGY_DEMO_PROFILES = [
     "High-Energy Pop",
     "The Contradiction (Fix 1 — Independence)",
@@ -273,13 +274,29 @@ STRATEGY_ORDER = [
 ]
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
 def _pad(text: str, width: int) -> str:
-    """Truncate and left-pad text to exactly `width` chars."""
     return text[:width].ljust(width)
 
 
+def _wrap(text: str, width: int = 70, indent: str = "  ") -> str:
+    """Wrap long text to width, preserving paragraph breaks."""
+    paragraphs = text.split("\n")
+    wrapped = []
+    for para in paragraphs:
+        if para.strip():
+            wrapped.append(textwrap.fill(para, width=width, initial_indent=indent,
+                                         subsequent_indent=indent))
+        else:
+            wrapped.append("")
+    return "\n".join(wrapped)
+
+
+# ── Section 2: strategy comparison ───────────────────────────────────────────
+
 def print_strategy_comparison(songs: list) -> None:
-    col = 28   # characters per strategy column
+    col = 28
     strat_labels = {
         "genre-first":    "Genre-First",
         "mood-first":     "Mood-First",
@@ -290,129 +307,163 @@ def print_strategy_comparison(songs: list) -> None:
 
     for profile_name in STRATEGY_DEMO_PROFILES:
         user_prefs = PROFILES[profile_name]
+        width = col * len(STRATEGY_ORDER) + len(STRATEGY_ORDER) - 1
 
-        print(f"\n{'╔' + '═' * (col * len(STRATEGY_ORDER) + len(STRATEGY_ORDER) - 1) + '╗'}")
+        print(f"\n{'╔' + '═' * width + '╗'}")
         print(f"  STRATEGY COMPARISON — {profile_name}")
-        print(f"{'╚' + '═' * (col * len(STRATEGY_ORDER) + len(STRATEGY_ORDER) - 1) + '╝'}")
+        print(f"{'╚' + '═' * width + '╝'}")
 
-        # Header row
-        header = " | ".join(_pad(strat_labels[s], col) for s in STRATEGY_ORDER)
-        desc_row = " | ".join(
-            _pad(STRATEGIES[s]["description"], col) for s in STRATEGY_ORDER
-        )
+        header  = " | ".join(_pad(strat_labels[s], col) for s in STRATEGY_ORDER)
+        descs   = " | ".join(_pad(STRATEGIES[s]["description"], col) for s in STRATEGY_ORDER)
         print(f"\n  {header}")
-        print(f"  {desc_row}")
+        print(f"  {descs}")
         print(f"  {'─' * (col * len(STRATEGY_ORDER) + (len(STRATEGY_ORDER) - 1) * 3)}")
 
-        # Top-5 rows per strategy, printed side by side
-        results = {
-            s: recommend_with_strategy(user_prefs, songs, s, k=5)
-            for s in STRATEGY_ORDER
-        }
-
+        results = {s: recommend_with_strategy(user_prefs, songs, s, k=5) for s in STRATEGY_ORDER}
         for rank in range(5):
-            row_parts = []
+            row = []
             for s in STRATEGY_ORDER:
                 song, score, _ = results[s][rank]
-                cell = f"{rank+1}. {song['title']} [{score:.1f}]"
-                row_parts.append(_pad(cell, col))
-            print(f"  {' | '.join(row_parts)}")
+                row.append(_pad(f"{rank+1}. {song['title']} [{score:.1f}]", col))
+            print(f"  {' | '.join(row)}")
 
-        # Highlight where strategies disagree on #1
-        top_ones = {s: results[s][0][0]["title"] for s in STRATEGY_ORDER}
-        unique_tops = set(top_ones.values())
-        print(f"\n  #1 winners: {len(unique_tops)} distinct song(s)")
+        top_ones   = {s: results[s][0][0]["title"] for s in STRATEGY_ORDER}
+        unique_top = set(top_ones.values())
+        print(f"\n  #1 winners: {len(unique_top)} distinct song(s)")
         for s in STRATEGY_ORDER:
             print(f"    {strat_labels[s]:16s}  →  {top_ones[s]}")
         print()
 
 
-def main() -> None:
-    """Run all profiles with the active strategy, then print strategy comparison."""
-    songs = load_songs("data/songs.csv")
-    strategy = get_strategy(ACTIVE_STRATEGY)
+# ── Main ──────────────────────────────────────────────────────────────────────
 
-    # ── Full profile run (active strategy) ───────────────────────────────────
-    print(f"\n  Using ranking strategy: {strategy.name!r} — {strategy.description}")
+def main() -> None:
+    """
+    ToneMatch main loop.
+
+    Sections
+    --------
+    1  Profile recommendations — AI narrative (selected) or raw scores (others)
+    2  Strategy comparison     — numerical side-by-side table
+    3  RAG queries             — classify → retrieve → generate → validate
+    4  Occasion planning       — step-by-step playlist curation
+    """
+    songs      = load_songs("data/songs.csv")
+    strategy   = get_strategy(ACTIVE_STRATEGY)
+    ai_enabled = bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+    print(f"\n  Strategy : {strategy.name!r} — {strategy.description}")
+    print(f"  AI mode  : {'enabled' if ai_enabled else 'disabled (set ANTHROPIC_API_KEY)'}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SECTION 1 — Profile-based recommendations
+    # ═══════════════════════════════════════════════════════════════════════════
+    #
+    # The scoring engine ranks songs against each profile (retrieval).
+    # For AI-narrated profiles, Claude receives those ranked songs as context
+    # and formulates the recommendation narrative (generation).
+    # For other profiles the raw score output is shown as-is.
+
+    print(f"\n\n{'#' * 62}")
+    print("  SECTION 1 — PROFILE RECOMMENDATIONS")
+    print(f"{'#' * 62}")
+
     for profile_name, user_prefs in PROFILES.items():
         print(f"\n{'=' * 62}")
         print(f"  PROFILE: {profile_name}")
         print(f"{'=' * 62}")
 
+        # Retrieval: score every song and return top-5
         recommendations = strategy.rank(user_prefs, songs, k=5)
 
-        for idx, rec in enumerate(recommendations, start=1):
-            song, score, explanation = rec
-            print(f"\n  {idx}. {song['title']} by {song['artist']}")
-            print(f"     Genre: {song['genre']} / {song['mood']}  |  Score: {score:.4f}")
-            print("     Reasons:")
-            for reason in explanation.split(" | "):
-                print(f"       - {reason}")
+        narrate = ai_enabled and profile_name in AI_NARRATED_PROFILES
+
+        if narrate:
+            # Generation: Claude synthesizes the scored results into a narrative.
+            # The AI actively uses the match signals as evidence — it does not
+            # invent reasons or fall back to generic descriptions.
+            print("\n  [AI-narrated — scoring engine retrieved, Claude generated]\n")
+            narrative = generate_recommendation_response(user_prefs, recommendations)
+            print(_wrap(narrative, width=62))
+        else:
+            # Fallback: raw score output
+            for idx, (song, score, explanation) in enumerate(recommendations, start=1):
+                print(f"\n  {idx}. {song['title']} by {song['artist']}")
+                print(f"     Genre: {song['genre']} / {song['mood']}  |  Score: {score:.4f}")
+                print("     Reasons:")
+                for reason in explanation.split(" | "):
+                    print(f"       - {reason}")
         print()
 
-    # ── Strategy comparison ───────────────────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SECTION 2 — Strategy comparison (numerical)
+    # ═══════════════════════════════════════════════════════════════════════════
+
     print(f"\n\n{'#' * 62}")
-    print("  RANKING STRATEGY COMPARISON")
+    print("  SECTION 2 — STRATEGY COMPARISON")
     print(f"{'#' * 62}")
-    print("  Each column shows the top-5 for the same profile scored")
-    print("  under a different weighting strategy.\n")
+    print("  Same profile, five different weighting strategies.\n")
     print_strategy_comparison(songs)
 
-    # ── AI Features demo ─────────────────────────────────────────────────────
-    _run_ai_demo(songs)
-
-
-def _run_ai_demo(songs: list) -> None:
-    """Demonstrate all four AI feature categories using the loaded catalog."""
-    import os
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("\n[AI demo skipped — set ANTHROPIC_API_KEY to enable]\n")
+    if not ai_enabled:
+        print("\n  [Sections 3 & 4 require ANTHROPIC_API_KEY]\n")
         return
 
-    banner = "#" * 62
-    print(f"\n\n{banner}")
-    print("  AI FEATURES DEMO")
-    print(f"{banner}\n")
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SECTION 3 — RAG: natural language queries
+    # ═══════════════════════════════════════════════════════════════════════════
+    #
+    # Pipeline: classify intent → keyword retrieval → Claude generation
+    #           → relevance validation (automated guardrail).
+    # Claude's answer is the primary output; guardrail scores show that the
+    # system validates its own outputs automatically.
 
-    demo_prefs = PROFILES["High-Energy Pop"]
-    demo_strategy = get_strategy("genre-first")
-    demo_recs = demo_strategy.rank(demo_prefs, songs, k=5)
+    print(f"\n\n{'#' * 62}")
+    print("  SECTION 3 — RAG: NATURAL LANGUAGE RECOMMENDATIONS")
+    print(f"{'#' * 62}")
+    print("  Pipeline: classify → retrieve → generate → validate\n")
 
-    # 1. SUMMARIZE: profile + recommendations ─────────────────────────────────
-    print("── 1. SUMMARIZE ─────────────────────────────────────────────")
-    print("   Profile summary:")
-    print(f"   {summarize_profile(demo_prefs)}\n")
-    print("   Recommendation summary:")
-    print(f"   {summarize_recommendations(demo_prefs, demo_recs)}\n")
+    for query in RAG_QUERIES:
+        print(f"  Query    : {query!r}")
 
-    # 2. RAG: natural language query → retrieve → generate → validate ─────────
-    print("── 2. RAG (Retrieve-Augmented Generation) ───────────────────")
-    rag_query = "I need upbeat pop songs to keep me going on a road trip"
-    print(f"   Query: {rag_query!r}")
-    rag_result = rag_recommend(rag_query, songs)
-    print(f"   Safety check: {rag_result['safety_check']}")
-    print(f"   Relevance score: {rag_result['relevance_check']['score']}/5")
-    print(f"   Answer:\n   {rag_result['answer'][:400]}...\n")
+        # Step 1 — classify free-text into structured intent
+        intent = classify_query_intent(query)
+        print(f"  Intent   : genre={intent.get('genre','?')!r}, "
+              f"mood={intent.get('mood','?')!r}, "
+              f"energy={intent.get('energy','?')!r}, "
+              f"occasion={intent.get('occasion','?')!r}")
 
-    # 3. PLAN: step-by-step playlist for an occasion ──────────────────────────
-    print("── 3. STEP-BY-STEP PLANNING ─────────────────────────────────")
-    occasion = "a dinner party that starts relaxed and builds to dancing"
-    print(f"   Occasion: {occasion!r}")
-    plan = plan_playlist_for_occasion(occasion, songs)
-    print(f"   Plan:\n{plan[:500]}...\n")
+        # Steps 2–4 — full RAG pipeline (retrieval + generation + guardrails)
+        result  = rag_recommend(query, songs)
+        safe    = "✓ safe" if result["safety_check"]["safe"] else "✗ flagged"
+        rel_chk = result["relevance_check"] or {}
+        rel     = f"{rel_chk.get('score', '?')}/5"
+        issues  = rel_chk.get("issues", [])
 
-    # 4. EXPLAIN / CLASSIFY ───────────────────────────────────────────────────
-    print("── 4. EXPLAIN & CLASSIFY ────────────────────────────────────")
-    top_song, top_score, top_reasons = demo_recs[0]
-    print(f"   Why did '{top_song['title']}' score {top_score:.2f}?")
-    explanation = explain_song_score(top_song, demo_prefs, top_score, top_reasons)
-    print(f"   {explanation}\n")
+        print(f"  Safety   : {safe}")
+        print(f"  Relevance: {rel}" + (f"  issues: {issues}" if issues else ""))
+        print(f"\n  Recommendation:\n")
+        print(_wrap(result["answer"], width=62))
+        if rel_chk.get("score", 5) < 3:
+            print("\n  [GUARDRAIL] Relevance score below threshold — "
+                  "results may not fully match query intent.")
+        print(f"\n  {'─' * 58}\n")
 
-    free_text = "something dark and moody for a late night drive"
-    intent = classify_query_intent(free_text)
-    print(f"   Query intent for {free_text!r}:")
-    print(f"   {intent}\n")
-    print(banner)
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SECTION 4 — Step-by-step playlist planning
+    # ═══════════════════════════════════════════════════════════════════════════
+    #
+    # Claude reasons through the occasion's energy arc, maps moods to phases,
+    # and selects specific songs from the catalog — shown step by step.
+
+    print(f"\n{'#' * 62}")
+    print("  SECTION 4 — STEP-BY-STEP PLAYLIST PLANNING")
+    print(f"{'#' * 62}")
+    print(f"  Occasion: {PLANNING_OCCASION!r}\n")
+
+    plan = plan_playlist_for_occasion(PLANNING_OCCASION, songs)
+    print(_wrap(plan, width=62))
+    print()
 
 
 if __name__ == "__main__":
