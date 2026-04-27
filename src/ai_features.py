@@ -16,8 +16,8 @@ Requires: ANTHROPIC_API_KEY environment variable.
 """
 
 import json
-import os
-from typing import Dict, List, Optional, Tuple
+import re
+from typing import Dict, List, Tuple
 
 import anthropic
 
@@ -71,6 +71,18 @@ _ENERGY_KEYWORDS: Dict[str, List[str]] = {
 }
 
 
+# ── Retrieval helpers ─────────────────────────────────────────────────────────
+
+def _word_in(keyword: str, text: str) -> bool:
+    """True if *keyword* appears as a whole word in *text* (word-boundary match)."""
+    return bool(re.search(r"\b" + re.escape(keyword) + r"\b", text))
+
+
+def _kw_hits(q: str, keyword_map: Dict[str, List[str]], song_val: str) -> float:
+    """Return 2.0 if any keyword for *song_val* appears as a whole word in *q*."""
+    return 2.0 if any(_word_in(kw, q) for kw in keyword_map.get(song_val, [])) else 0.0
+
+
 # ── Retrieval ─────────────────────────────────────────────────────────────────
 
 def retrieve_songs_for_query(query: str, songs: List[Dict], k: int = 8) -> List[Dict]:
@@ -79,46 +91,37 @@ def retrieve_songs_for_query(query: str, songs: List[Dict], k: int = 8) -> List[
     and return the top-k most relevant ones.
 
     This is the R in RAG — no embeddings required, runs fully offline.
+    Query flags are pre-computed once outside the song loop for efficiency.
     """
     q = query.lower()
+
+    wants_high     = any(_word_in(kw, q) for kw in _ENERGY_KEYWORDS["high"])
+    wants_low      = any(_word_in(kw, q) for kw in _ENERGY_KEYWORDS["low"])
+    wants_acoustic = any(_word_in(kw, q) for kw in ["acoustic", "unplugged", "raw"])
+    wants_inst     = any(_word_in(kw, q) for kw in
+                         ["instrumental", "no lyrics", "no vocals", "wordless"])
+
     scored: List[Tuple[Dict, float]] = []
-
     for song in songs:
-        score = 0.0
+        score = (_kw_hits(q, _MOOD_KEYWORDS,  song.get("mood",  ""))
+                 + _kw_hits(q, _GENRE_KEYWORDS, song.get("genre", "")))
 
-        # Mood keyword match
-        for mood, keywords in _MOOD_KEYWORDS.items():
-            if any(kw in q for kw in keywords) and song.get("mood") == mood:
-                score += 2.0
-
-        # Genre keyword match
-        for genre, keywords in _GENRE_KEYWORDS.items():
-            if any(kw in q for kw in keywords) and song.get("genre") == genre:
-                score += 2.0
-
-        # Energy direction
-        if any(kw in q for kw in _ENERGY_KEYWORDS["high"]):
+        if wants_high:
             score += float(song.get("energy", 0.5)) * 1.5
-        if any(kw in q for kw in _ENERGY_KEYWORDS["low"]):
+        if wants_low:
             score += (1.0 - float(song.get("energy", 0.5))) * 1.5
-
-        # Acoustic preference
-        if any(kw in q for kw in ["acoustic", "unplugged", "raw"]):
-            score += float(song.get("acousticness", 0.0)) * 1.0
-
-        # Instrumental preference
-        if any(kw in q for kw in ["instrumental", "no lyrics", "no vocals", "wordless"]):
+        if wants_acoustic:
+            score += float(song.get("acousticness", 0.0))
+        if wants_inst:
             score += float(song.get("instrumentalness", 0.0)) * 1.5
 
-        # Explicit title / artist mention
         if song.get("title", "").lower() in q:
             score += 5.0
         if song.get("artist", "").lower() in q:
             score += 3.0
 
-        # Detailed mood-tag overlap
         for tag in song.get("detailed_mood_tags", "").split("|"):
-            if tag and tag in q:
+            if tag and _word_in(tag, q):
                 score += 0.5
 
         scored.append((song, score))
@@ -161,7 +164,10 @@ def validate_query_safety(query: str) -> Dict:
             ),
         }],
     )
-    return _parse_json(resp.content[0].text, default={"safe": True, "reason": "parse error; defaulting safe"})
+    return _parse_json(
+        resp.content[0].text,
+        default={"safe": True, "reason": "parse error; defaulting safe"},
+    )
 
 
 def validate_recommendation_relevance(query: str, recommendations: List[Dict]) -> Dict:
@@ -195,7 +201,7 @@ def _parse_json(text: str, default: Dict) -> Dict:
         start = text.find("{")
         end = text.rfind("}") + 1
         return json.loads(text[start:end])
-    except Exception:
+    except (json.JSONDecodeError, ValueError):
         return default
 
 

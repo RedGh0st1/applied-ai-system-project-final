@@ -11,10 +11,17 @@ You will implement the functions in recommender.py:
 
 from .recommender import (
     load_songs,
-    recommend_songs,
     recommend_with_strategy,
     get_strategy,
     STRATEGIES,
+)
+from .ai_features import (
+    rag_recommend,
+    summarize_profile,
+    summarize_recommendations,
+    plan_playlist_for_occasion,
+    explain_song_score,
+    classify_query_intent,
 )
 
 # ── Active strategy — change this one line to switch ranking modes ─────────────
@@ -350,6 +357,62 @@ def main() -> None:
     print("  Each column shows the top-5 for the same profile scored")
     print("  under a different weighting strategy.\n")
     print_strategy_comparison(songs)
+
+    # ── AI Features demo ─────────────────────────────────────────────────────
+    _run_ai_demo(songs)
+
+
+def _run_ai_demo(songs: list) -> None:
+    """Demonstrate all four AI feature categories using the loaded catalog."""
+    import os
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("\n[AI demo skipped — set ANTHROPIC_API_KEY to enable]\n")
+        return
+
+    banner = "#" * 62
+    print(f"\n\n{banner}")
+    print("  AI FEATURES DEMO")
+    print(f"{banner}\n")
+
+    demo_prefs = PROFILES["High-Energy Pop"]
+    demo_strategy = get_strategy("genre-first")
+    demo_recs = demo_strategy.rank(demo_prefs, songs, k=5)
+
+    # 1. SUMMARIZE: profile + recommendations ─────────────────────────────────
+    print("── 1. SUMMARIZE ─────────────────────────────────────────────")
+    print("   Profile summary:")
+    print(f"   {summarize_profile(demo_prefs)}\n")
+    print("   Recommendation summary:")
+    print(f"   {summarize_recommendations(demo_prefs, demo_recs)}\n")
+
+    # 2. RAG: natural language query → retrieve → generate → validate ─────────
+    print("── 2. RAG (Retrieve-Augmented Generation) ───────────────────")
+    rag_query = "I need upbeat pop songs to keep me going on a road trip"
+    print(f"   Query: {rag_query!r}")
+    rag_result = rag_recommend(rag_query, songs)
+    print(f"   Safety check: {rag_result['safety_check']}")
+    print(f"   Relevance score: {rag_result['relevance_check']['score']}/5")
+    print(f"   Answer:\n   {rag_result['answer'][:400]}...\n")
+
+    # 3. PLAN: step-by-step playlist for an occasion ──────────────────────────
+    print("── 3. STEP-BY-STEP PLANNING ─────────────────────────────────")
+    occasion = "a dinner party that starts relaxed and builds to dancing"
+    print(f"   Occasion: {occasion!r}")
+    plan = plan_playlist_for_occasion(occasion, songs)
+    print(f"   Plan:\n{plan[:500]}...\n")
+
+    # 4. EXPLAIN / CLASSIFY ───────────────────────────────────────────────────
+    print("── 4. EXPLAIN & CLASSIFY ────────────────────────────────────")
+    top_song, top_score, top_reasons = demo_recs[0]
+    print(f"   Why did '{top_song['title']}' score {top_score:.2f}?")
+    explanation = explain_song_score(top_song, demo_prefs, top_score, top_reasons)
+    print(f"   {explanation}\n")
+
+    free_text = "something dark and moody for a late night drive"
+    intent = classify_query_intent(free_text)
+    print(f"   Query intent for {free_text!r}:")
+    print(f"   {intent}\n")
+    print(banner)
 
 
 if __name__ == "__main__":
