@@ -40,6 +40,12 @@ The system has three independent execution paths, visualized in [`assets/system_
 
 ③ Planner Path
    Occasion → Planner: plan_playlist_for_occasion() (Claude Sonnet, samples catalog[:40]) → Playlist Plan
+
+④ Agentic Path  [Section 5]
+   Query → Claude decides: call search_catalog(genre/mood/energy) and/or rank_songs()
+         → observable step log (tool called, inputs, results)
+         → Claude calls more tools if needed (up to 8 iterations)
+         → Final answer grounded only in tool-returned songs
 ```
 
 **Shared data store:** `data/songs.csv` — 25 songs with 25+ attributes each. The Scoring Engine and Keyword Retriever both read from it; the Planner samples the first 40 entries directly.
@@ -211,6 +217,55 @@ Step 4 — Dancing (energy 0.78–0.95)
 
 ---
 
+### Interaction 4 — Agentic Multi-Step Reasoning (Section 5)
+
+**Input query:** `"I want something calm but not too quiet for a yoga class"`
+
+**Observable intermediate steps (printed to console):**
+
+```text
+  Step 1 [search_catalog]  field='mood'  value='chill'
+         → found 4 songs
+         → songs: Library Rain, Focus Flow, Midnight Coding, Island Morning
+
+  Step 2 [search_catalog]  field='energy'  value='0.3,0.6'
+         → found 10 songs
+         → songs: Midnight Coding, Library Rain, Coffee Shop Stories, Focus Flow, Golden Hour ...
+
+  Step 3 [rank_songs]  ids=[2, 4, 8, 12, ...]  desc='calm but not too quiet yoga background'
+         → ranked 5 songs
+         → songs: Island Morning, Golden Hour, Focus Flow, Coffee Shop Stories, Library Rain
+```
+
+**Claude's final answer (grounded only in tool results):**
+
+```text
+For a yoga class you want presence without intensity — something the
+room can breathe with, not over. Based on what's in the catalog:
+
+Island Morning (reggae / uplifting, energy 0.52) leads because it has
+forward motion without urgency. The rhythm is slow enough to let
+people settle into poses but alive enough that silence never creeps in.
+
+Golden Hour (indie pop / relaxed, energy 0.48) is the backup if you
+want something more neutral — less personality, longer attention span.
+
+Focus Flow (lofi / focused, energy 0.40) is the floor: good for the
+final cooldown stretch where you actually want quiet.
+```
+
+**Songs selected by agent:**
+
+```text
+  • Island Morning by Coastal Echo  [reggae / uplifting  energy 0.52]
+  • Golden Hour by The Slow Burners [indie pop / relaxed  energy 0.48]
+  • Focus Flow by NightOwl Beats    [lofi / focused       energy 0.40]
+```
+
+What makes this path different from the RAG path: Claude is not given a pre-retrieved list. It decides which filters to apply, observes the results, and chooses whether to refine further before committing to an answer. The step log shows that decision process.
+
+---
+
 ## Design Decisions
 
 ### Why keep the rule-based scoring engine instead of letting Claude do everything?
@@ -230,6 +285,14 @@ Guardrail and classification calls (`validate_query_safety`, `validate_recommend
 ### Why five ranking strategies instead of one?
 
 A single scoring formula cannot serve every listener. "Genre-first" weights genre heavily and is the right default for someone who knows what genre they want. "Discovery" deliberately penalizes genre repetition to surface songs the user would not expect. "Vibe-match" leans on valence and mood over genre labels. Rather than trying to find one formula that works for everyone, the system makes the weighting explicit and swappable. The side-by-side comparison in Section 2 is designed specifically to show how the same profile produces different top-5 lists under each strategy.
+
+### Why add an agentic path when RAG already works?
+
+The RAG path (Section 3) always follows the same fixed sequence: classify → retrieve → generate → validate. It cannot adapt based on what the retrieval actually returned. If the keyword retriever returns weak candidates, the generator still produces an answer from them with no opportunity to try a different search.
+
+The agentic path gives Claude agency over that retrieval decision. It can search by mood, observe that only two songs matched, and then broaden to an energy range search to gather more candidates before ranking. The intermediate steps make that decision process visible — you can see exactly which tools Claude called and in what order, which is not possible in a fixed pipeline.
+
+The trade-off: agentic calls are less predictable and harder to test. The number of API calls per query varies (1–8 rounds), and Claude occasionally calls tools in a suboptimal order. A fixed pipeline is faster and more consistent; the agentic path is more adaptive but less controllable.
 
 ### Trade-offs accepted
 
@@ -331,6 +394,29 @@ Seven profile pairs were manually reviewed in [`reflection.md`](reflection.md), 
 | The Mismatch Maximizer | Gap from #1 (8.23) to #2 (4.40) reveals when the catalog simply has no good match. Correct behavior, wrong feel. |
 
 **Summary: 6 of 7 comparisons produced expected behavior.** The Contradiction profile (conflicting genre and valence preferences) exposes the system's known limitation — it adds up partial scores from contradictory signals without detecting the conflict. The AI does not know the user's preferences are self-contradictory, and neither does the guardrail.
+
+### 5. Agentic Workflow — Tool-level verification (offline)
+
+The two agent tools (`search_catalog`, `rank_songs`) can be verified without an API key because they are pure Python functions over the in-memory song list:
+
+```bash
+python3 -c "
+from src.ai_features import _execute_agent_tool
+from src.recommender import load_songs
+songs = load_songs('data/songs.csv')
+
+r = _execute_agent_tool('search_catalog', {'field': 'genre', 'value': 'lofi'}, songs)
+print('lofi:', r['count'], 'songs')           # → 3 songs
+
+r = _execute_agent_tool('search_catalog', {'field': 'energy', 'value': '0.3,0.55'}, songs)
+print('energy 0.3-0.55:', r['count'], 'songs') # → 9 songs
+
+r = _execute_agent_tool('rank_songs', {'song_ids': [2, 4, 7], 'description': 'calm study beats'}, songs)
+print('ranked:', [s['title'] for s in r['ranked']])
+"
+```
+
+The full agentic loop (`agentic_recommend`) requires the API and is verified manually via the step log printed in Section 5. The three observable checks are: (1) at least two steps appear before the final answer, (2) every song named in the answer also appears in the step log, and (3) the agent never exceeds 8 tool calls per query.
 
 ---
 

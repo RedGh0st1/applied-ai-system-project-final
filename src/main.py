@@ -259,6 +259,15 @@ RAG_QUERIES = [
 # ── Occasion for Section 4 ────────────────────────────────────────────────────
 PLANNING_OCCASION = "a dinner party that starts relaxed and gradually builds to dancing"
 
+# ── Queries for Section 5 (agentic workflow) ──────────────────────────────────
+# Chosen to require multi-tool reasoning: each needs at least one catalog
+# search plus a ranking step, and the right answer is non-obvious from the
+# query words alone.
+AGENT_QUERIES = [
+    "I want something calm but not too quiet for a yoga class",
+    "Find me dark and intense music that isn't typical metal",
+]
+
 # ── Strategy comparison config ────────────────────────────────────────────────
 STRATEGY_DEMO_PROFILES = [
     "High-Energy Pop",
@@ -482,6 +491,63 @@ def main() -> None:
     logger.info("Planning playlist for occasion: %r", PLANNING_OCCASION)
     plan = plan_playlist_for_occasion(PLANNING_OCCASION, songs)
     print(_wrap(plan, width=62))
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SECTION 5 — Agentic workflow: multi-step reasoning with observable steps
+    # ═══════════════════════════════════════════════════════════════════════════
+    #
+    # Claude is given two catalog tools (search_catalog, rank_songs) and decides
+    # autonomously which to call, in what order, and with what arguments.
+    # Every tool call and its result are printed as observable intermediate steps
+    # so the reasoning chain is visible — not just the final answer.
+
+    print(f"\n\n{'#' * 62}")
+    print("  SECTION 5 — AGENTIC WORKFLOW")
+    print(f"{'#' * 62}")
+    print("  Claude decides which catalog tools to call and in what order.")
+    print("  Intermediate steps are shown so the reasoning chain is visible.\n")
+
+    for query in AGENT_QUERIES:
+        logger.info("Agentic query: %r", query)
+        print(f"  Query    : {query!r}\n")
+
+        result = agentic_recommend(query, songs)
+
+        # Print each intermediate step
+        for step in result["steps"]:
+            tool    = step["tool"]
+            inputs  = step["inputs"]
+            summary = step["result_summary"]
+
+            if tool == "search_catalog":
+                field = inputs.get("field", "?")
+                value = inputs.get("value", "?")
+                print(f"  Step {step['step']} [{tool}]  field={field!r}  value={value!r}")
+            else:
+                ids   = inputs.get("song_ids", [])
+                desc  = inputs.get("description", "?")
+                print(f"  Step {step['step']} [{tool}]  ids={ids}  desc={desc!r}")
+
+            print(f"         → {summary}")
+
+            # Show the song titles returned by each step
+            songs_out = step["result"].get("songs") or step["result"].get("ranked") or []
+            if songs_out:
+                titles = ", ".join(s["title"] for s in songs_out[:5])
+                print(f"         → songs: {titles}")
+            print()
+
+        print("  Final answer:\n")
+        print(_wrap(result["answer"], width=62))
+
+        if result["final_songs"]:
+            print("\n  Songs selected by agent:")
+            for s in result["final_songs"]:
+                print(f"    • {s['title']} by {s['artist']}"
+                      f"  [{s['genre']} / {s['mood']}  energy {s['energy']:.2f}]")
+
+        print(f"\n  {'─' * 58}\n")
+
     logger.info("ToneMatch run complete")
     print()
 
